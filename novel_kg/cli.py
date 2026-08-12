@@ -1,11 +1,14 @@
 import argparse
 import os
 
+from dotenv import load_dotenv
+
 from novel_kg.llm_client import OpenAICompatibleClient
 from novel_kg.pipeline import run_pipeline
 
 
 def main() -> None:
+    load_dotenv()  # 从项目根 .env 读取 LLM_* 配置（.env 已 gitignore，不会提交）
     ap = argparse.ArgumentParser(description="小说知识图谱 v1：抽取流水线")
     ap.add_argument("--novel", required=True, help="小说 txt 路径")
     ap.add_argument("--schema", default="config/novels/xuanjian.yaml", help="schema 配置")
