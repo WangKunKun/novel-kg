@@ -1,0 +1,40 @@
+entity_types:
+  人物:
+    fields: [别名, 所属势力, 境界, 简介]
+  势力:
+    fields: [层级, 立场, 首领, 简介]
+  仙基:
+    classify_by: [五行, 品阶, 传承]
+    fields: [作用, 修炼者, 副作用]
+  道具:
+    classify_by: [品阶]
+    fields: [类型, 作用, 当前持有者, 简介]
+relation_types:
+  - name: 所属
+    from_type: 人物
+    to_type: 势力
+    description: 人物所属势力
+  - name: 修炼
+    from_type: 人物
+    to_type: 仙基
+  - name: 持有
+    from_type: 人物
+    to_type: 道具
+  - name: 关系
+    from_type: 人物
+    to_type: 人物
+    description: 师徒/敌对/亲属/恋人/盟友等，写进 attrs
+  - name: 克制
+    from_type: 仙基
+    to_type: 仙基
+  - name: 敌对
+    from_type: 势力
+    to_type: 势力
+classification_dimensions:
+  五行: [金, 木, 水, 火, 土]
+  品阶: [凡品, 灵品, 仙品]
+  传承: [玄鉴仙族, 其他势力, 散修]
+taxonomy_parents:
+  五行:
+    玄水: 水
+    灵水: 水
