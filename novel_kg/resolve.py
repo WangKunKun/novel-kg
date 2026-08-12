@@ -11,9 +11,9 @@ def _new_id(prefix: str) -> str:
     return f"{prefix}_{uuid.uuid4().hex[:8]}"
 
 
-def _rel_id(from_id: str, to_id: str, type_: str, chapter: int) -> str:
-    """确定性关系 id：同一章同样的 (from,to,type) 重跑也只产生一行，保证增量幂等。"""
-    key = f"{from_id}|{to_id}|{type_}|{chapter}"
+def _rel_id(from_id: str, to_id: str, type_: str) -> str:
+    """确定性关系 id：同样的 (from,to,type) 只产生一行（跨章也不重复），图谱边唯一。"""
+    key = f"{from_id}|{to_id}|{type_}"
     return f"rel_{hashlib.md5(key.encode()).hexdigest()[:12]}"
 
 
@@ -69,6 +69,6 @@ def resolve_extraction(
         )
         if from_id and to_id:
             db.upsert_relation(
-                _rel_id(from_id, to_id, r.type, chapter_idx), from_id, to_id, r.type,
+                _rel_id(from_id, to_id, r.type), from_id, to_id, r.type,
                 json.dumps(r.attrs, ensure_ascii=False), chapter_idx, r.evidence,
             )

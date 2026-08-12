@@ -18,7 +18,8 @@ CREATE TABLE IF NOT EXISTS entities (
 );
 CREATE TABLE IF NOT EXISTS aliases (
     entity_id TEXT,
-    alias TEXT
+    alias TEXT,
+    UNIQUE(entity_id, alias)
 );
 CREATE TABLE IF NOT EXISTS relations (
     id TEXT PRIMARY KEY,
@@ -32,7 +33,8 @@ CREATE TABLE IF NOT EXISTS relations (
 CREATE TABLE IF NOT EXISTS classifications (
     entity_id TEXT,
     dimension TEXT,
-    value TEXT
+    value TEXT,
+    UNIQUE(entity_id, dimension, value)
 );
 CREATE TABLE IF NOT EXISTS taxonomy (
     dimension TEXT,
@@ -146,7 +148,7 @@ class DB:
     def upsert_relation(self, rid: str, from_id: str, to_id: str, type_: str,
                         attrs_json: str, chapter: int, evidence: str) -> None:
         self.conn.execute(
-            "INSERT OR REPLACE INTO relations(id,from_id,to_id,type,attrs_json,chapter,evidence) "
+            "INSERT OR IGNORE INTO relations(id,from_id,to_id,type,attrs_json,chapter,evidence) "
             "VALUES(?,?,?,?,?,?,?)",
             (rid, from_id, to_id, type_, attrs_json, chapter, evidence),
         )

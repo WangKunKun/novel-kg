@@ -1,3 +1,5 @@
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 
@@ -7,8 +9,8 @@ class ExtractedEntity(BaseModel):
     aliases: list[str] = Field(default_factory=list)
     # 维度 -> 取值，如 {"五行": "水"}
     classifications: dict[str, str] = Field(default_factory=dict)
-    # 类型专属字段，如 {"境界": "元力"}
-    attrs: dict[str, str] = Field(default_factory=dict)
+    # 类型专属字段，值可能是字符串/列表/数字，故用 Any
+    attrs: dict[str, Any] = Field(default_factory=dict)
     evidence: str = ""
 
 
@@ -16,7 +18,7 @@ class ExtractedRelation(BaseModel):
     from_name: str
     to_name: str
     type: str
-    attrs: dict[str, str] = Field(default_factory=dict)
+    attrs: dict[str, Any] = Field(default_factory=dict)
     evidence: str = ""
 
 

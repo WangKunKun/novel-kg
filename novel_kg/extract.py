@@ -27,6 +27,7 @@ def build_system_prompt(schema: SchemaConfig) -> str:
         '"relations":[{"from_name","to_name","type","attrs":{},"evidence":"本章原文片段"}]}\n'
         "\n硬性要求：1) 每条实体和关系都必须有 evidence（本章原文片段）。"
         "2) 拿不准的字段留空，不要编造。3) 只输出 JSON，不要解释。"
+        "4) 人物的别名放进 entities[].aliases 数组，不要放进 attrs；attrs 的值都用字符串。"
     )
     return "\n".join(lines)
 
