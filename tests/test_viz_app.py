@@ -108,3 +108,16 @@ def test_render_network_node_size_by_rank():
     titles = {n["id"]: n["title"] for n in net.nodes}
     assert "境界：筑基" in titles["P1"]
     assert "境界" not in titles["P2"]    # 空境界不显示行
+
+
+def test_render_network_item_size_by_grade():
+    from novel_kg.viz_app import render_network
+
+    entities = [
+        {"id": "I1", "type": "道具", "name": "仙丹", "attrs_json": "{}"},
+        {"id": "I2", "type": "道具", "name": "凡铁", "attrs_json": "{}"},
+        {"id": "I3", "type": "道具", "name": "无名物", "attrs_json": "{}"},
+    ]
+    net = render_network(entities, [], grades={"I1": "仙品", "I2": "凡品"})
+    sizes = {n["id"]: n["size"] for n in net.nodes}
+    assert sizes["I1"] == 19 and sizes["I2"] == 12 and sizes["I3"] == 10

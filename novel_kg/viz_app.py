@@ -51,12 +51,14 @@ def faction_rank(level: str) -> int:
     return 1
 
 
-def node_size(type_: str, attrs: dict) -> int:
-    """节点大小：人物按境界、势力按层级线性放大，其余类型默认。"""
+def node_size(type_: str, attrs: dict, grade: str = "") -> int:
+    """节点大小：人物按境界、势力按层级、道具按品阶，其余默认。"""
     if type_ == "人物":
         return 8 + round(person_rank(str(attrs.get("境界", ""))) * 20 / 12)
     if type_ == "势力":
         return 10 + faction_rank(str(attrs.get("层级", ""))) * 2
+    if type_ == "道具":
+        return {"凡品": 12, "灵品": 15, "仙品": 19}.get(grade, 10)
     return 15
 
 
@@ -74,7 +76,9 @@ def load_graph(db: DB, entity_type: str | None = None,
 
 
 def render_network(entities: list[dict], rels: list[dict],
-                   evolution: dict[str, str] | None = None) -> Network:
+                   evolution: dict[str, str] | None = None,
+                   grades: dict[str, str] | None = None) -> Network:
+    """evolution: 边演变悬停文本（key "from->to"）；grades: 道具 entity_id→品阶。"""
     type_colors = {"人物": "#e6194b", "势力": "#3cb44b", "仙基": "#4363d8",
                    "道具": "#f58231", "功法": "#911eb4", "术法": "#46f0f0"}
     # cdn_resources="in_line"：把 vis-network 的 JS 内联进 HTML，避免在
@@ -93,7 +97,7 @@ def render_network(entities: list[dict], rels: list[dict],
             sub = f"\n层级：{attrs['层级']}"
         net.add_node(e["id"], label=e["name"],
                      color=type_colors.get(e["type"], "#999999"),
-                     size=node_size(e["type"], attrs),
+                     size=node_size(e["type"], attrs, (grades or {}).get(e["id"], "")),
                      title=f"{e['type']}｜{e['name']}{sub}")
     for r in rels:
         key = f"{r['from_id']}->{r['to_id']}"
@@ -137,7 +141,14 @@ def main() -> None:
                 hist = [h for h in hist if h["chapter"] <= as_of]
             if len(hist) > 1:
                 evolution[f"{r['from_id']}->{r['to_id']}"] = evolution_text(hist)
-        net = render_network(entities, rels, evolution)
+        # 道具品阶（classifications 表）→ 节点大小档位
+        grades = {}
+        for e in entities:
+            if e["type"] == "道具":
+                for c in db.list_classifications(e["id"]):
+                    if c["dimension"] == "品阶":
+                        grades[e["id"]] = c["value"]
+        net = render_network(entities, rels, evolution, grades)
         net.save_graph("/tmp/novel_kg_graph.html")
         st.components.v1.html(open("/tmp/novel_kg_graph.html", encoding="utf-8").read(),
                               height=920, scrolling=True)
