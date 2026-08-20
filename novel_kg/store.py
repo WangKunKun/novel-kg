@@ -219,12 +219,15 @@ class DB:
         ]
 
     def list_relation_events(self, type_: str | None = None) -> list[dict]:
+        # ORDER BY id：显式按写入序（≈章序），不依赖 rowid 隐式行为，回填乱序也稳定
         if type_:
             rows = self.conn.execute(
-                "SELECT * FROM relation_events WHERE type=?", (type_,)
+                "SELECT * FROM relation_events WHERE type=? ORDER BY id", (type_,)
             ).fetchall()
         else:
-            rows = self.conn.execute("SELECT * FROM relation_events").fetchall()
+            rows = self.conn.execute(
+                "SELECT * FROM relation_events ORDER BY id"
+            ).fetchall()
         return [dict(r) for r in rows]
 
     def max_relation_chapter(self) -> int:

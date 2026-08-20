@@ -1,6 +1,6 @@
 import json
 
-from novel_kg.store import DB, relation_label
+from novel_kg.store import DB, evolution_text, relation_label
 
 
 def generate_report(db: DB) -> str:
@@ -29,6 +29,25 @@ def generate_report(db: DB) -> str:
             parts = [p for p in (cls_str, attr_str) if p]
             lines.append(f"- **{e['name']}**{badge}" + (f"：{'；'.join(parts)}" if parts else ""))
         lines.append("")
+
+    # 势力关系演变（事件流时间线）
+    lines.append("## 势力关系演变")
+    name_by_id0 = {e["id"]: e["name"] for e in db.list_entities()}
+    faction_events = db.list_relation_events("势力关系")
+    if faction_events:
+        pairs: dict[tuple[str, str], list[dict]] = {}
+        for ev in faction_events:
+            pairs.setdefault((ev["from_id"], ev["to_id"]), []).append(ev)
+        for (fid, tid), evs in pairs.items():
+            a = name_by_id0.get(fid, "?")
+            b = name_by_id0.get(tid, "?")
+            lines.append(f"### {a} → {b}")
+            lines.append(f"- 演变：{evolution_text(evs)}")
+            for ev in evs:
+                lines.append(f"  - 第{ev['chapter']}章：{ev['evidence'] or '（无证据）'}")
+    else:
+        lines.append("- （暂无势力关系事件）")
+    lines.append("")
 
     # 关系
     rels = db.list_relations()
