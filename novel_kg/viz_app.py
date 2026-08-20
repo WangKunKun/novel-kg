@@ -32,7 +32,7 @@ def render_network(entities: list[dict], rels: list[dict],
                    "道具": "#f58231", "功法": "#911eb4", "术法": "#46f0f0"}
     # cdn_resources="in_line"：把 vis-network 的 JS 内联进 HTML，避免在
     # streamlit 的受限 iframe 里加载远程 CDN 失败导致图谱区域空白
-    net = Network(height="600px", width="100%", bgcolor="#ffffff",
+    net = Network(height="900px", width="100%", bgcolor="#ffffff",
                   cdn_resources="in_line")
     name_by_id = {}
     for e in entities:
@@ -85,7 +85,7 @@ def main() -> None:
         net = render_network(entities, rels, evolution)
         net.save_graph("/tmp/novel_kg_graph.html")
         st.components.v1.html(open("/tmp/novel_kg_graph.html", encoding="utf-8").read(),
-                              height=620, scrolling=True)
+                              height=920, scrolling=True)
 
     # 关系演变面板
     st.subheader("📖 关系演变时间线")
