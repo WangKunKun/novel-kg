@@ -82,7 +82,7 @@ def resolve_extraction(
         )
         if from_id and to_id:
             rid = _rel_id(from_id, to_id, r.type)
-            latest = db.latest_relation_event(from_id, to_id)
+            latest = db.latest_relation_event(from_id, to_id, chapter_idx)
             unchanged = (
                 latest is not None
                 and latest["type"] == r.type

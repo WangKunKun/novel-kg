@@ -145,3 +145,30 @@ def test_multi_key_attrs_repeat_no_extra_event(tmp_path):
     assert len(db.list_relations()) == 1
     # relations 表里的 attrs_json 是规范化（sort_keys）形式
     assert db.list_relations()[0]["attrs_json"] == '{"强度": "稳固", "性质": "盟友"}'
+
+
+def test_replay_old_chapter_no_inflation(tmp_path):
+    """重放场景：库中已有后续章节事件时，重放早期章不得因全局 latest 错位而膨胀。"""
+    schema = load_config("config/novels/xuanjian.yaml")
+    db = DB(str(tmp_path / "rp.db"))
+
+    def _ext(ch: int, attrs: dict) -> ChapterExtraction:
+        return ChapterExtraction(
+            entities=[
+                ExtractedEntity(type="人物", name="甲", evidence="x"),
+                ExtractedEntity(type="人物", name="乙", evidence="x"),
+            ],
+            relations=[ExtractedRelation(from_name="甲", to_name="乙", type="关系",
+                                         attrs=attrs, evidence="x")],
+        )
+
+    # 逐章跑到 60 章：父子 → 师徒（两次变化）
+    resolve_extraction(db, schema, 3, _ext(3, {"关系": "父子"}))
+    resolve_extraction(db, schema, 21, _ext(21, {"关系": "父子"}))
+    resolve_extraction(db, schema, 60, _ext(60, {"关系": "师徒"}))
+    n_events = len(db.list_relation_events())
+    assert n_events == 2  # 首现 + 师徒变化；21 章同状态跳过
+
+    # 重放第 3 章（pipeline 每次全量重放会走到）：不得新增事件
+    resolve_extraction(db, schema, 3, _ext(3, {"关系": "父子"}))
+    assert len(db.list_relation_events()) == n_events

@@ -189,11 +189,20 @@ class DB:
         )
         self.conn.commit()
 
-    def latest_relation_event(self, from_id: str, to_id: str) -> sqlite3.Row | None:
+    def latest_relation_event(self, from_id: str, to_id: str,
+                              chapter: int | None = None) -> sqlite3.Row | None:
+        """截至 chapter 章（含）的最新事件。chapter=None 为全局最新。
+        三态检测必须传当前章：重放旧章时全局 latest 会错位（第 3 章比到第 63 章的状态）。"""
+        if chapter is None:
+            return self.conn.execute(
+                "SELECT * FROM relation_events WHERE from_id=? AND to_id=? "
+                "ORDER BY id DESC LIMIT 1",
+                (from_id, to_id),
+            ).fetchone()
         return self.conn.execute(
-            "SELECT * FROM relation_events WHERE from_id=? AND to_id=? "
+            "SELECT * FROM relation_events WHERE from_id=? AND to_id=? AND chapter<=? "
             "ORDER BY id DESC LIMIT 1",
-            (from_id, to_id),
+            (from_id, to_id, chapter),
         ).fetchone()
 
     def relation_history(self, from_id: str, to_id: str) -> list[dict]:
