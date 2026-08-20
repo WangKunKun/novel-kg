@@ -168,6 +168,14 @@ class DB:
         )
         self.conn.commit()
 
+    def delete_relations_except(self, from_id: str, to_id: str, keep_id: str) -> None:
+        """删同对实体的其他关系行：每对至多一条当前边（type 变化时旧边作废）。"""
+        self.conn.execute(
+            "DELETE FROM relations WHERE from_id=? AND to_id=? AND id<>?",
+            (from_id, to_id, keep_id),
+        )
+        self.conn.commit()
+
     def list_relations(self) -> list[dict]:
         return [dict(r) for r in self.conn.execute("SELECT * FROM relations").fetchall()]
 

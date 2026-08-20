@@ -89,12 +89,9 @@ def resolve_extraction(
                 and latest["attrs_json"] == _norm_attrs(r.attrs)
             )
             if not unchanged:
-                attrs_json = json.dumps(r.attrs, ensure_ascii=False)
+                attrs_json = _norm_attrs(r.attrs)
                 # 每对至多一条当前边：type 变化时旧边作废
-                db.conn.execute(
-                    "DELETE FROM relations WHERE from_id=? AND to_id=? AND id<>?",
-                    (from_id, to_id, rid),
-                )
+                db.delete_relations_except(from_id, to_id, rid)
                 db.record_relation_event(rid, from_id, to_id, r.type,
                                          attrs_json, chapter_idx, r.evidence)
                 db.upsert_relation(rid, from_id, to_id, r.type,

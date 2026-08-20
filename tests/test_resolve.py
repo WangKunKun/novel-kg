@@ -121,3 +121,27 @@ def test_relation_type_change_replaces_old_edge(tmp_path):
     assert rels[0]["type"] == "关系"
     # 事件流完整保留两段历史
     assert len(db.list_relation_events()) == 2
+
+
+def test_multi_key_attrs_repeat_no_extra_event(tmp_path):
+    """多键 attrs（键序≠字典序）重复出现：存入与比较都用规范化串，不误判变化。"""
+    schema = load_config("config/novels/xuanjian.yaml")
+    db = DB(str(tmp_path / "mk.db"))
+
+    def _ext(attrs: dict) -> ChapterExtraction:
+        return ChapterExtraction(
+            entities=[
+                ExtractedEntity(type="势力", name="甲宗", evidence="x"),
+                ExtractedEntity(type="势力", name="乙门", evidence="x"),
+            ],
+            relations=[ExtractedRelation(from_name="甲宗", to_name="乙门",
+                                         type="势力关系", attrs=attrs, evidence="x")],
+        )
+
+    # 两次同 attrs 但构造时键序不同（dict 插入序不同）
+    resolve_extraction(db, schema, 5, _ext({"性质": "盟友", "强度": "稳固"}))
+    resolve_extraction(db, schema, 9, _ext({"强度": "稳固", "性质": "盟友"}))
+    assert len(db.list_relation_events()) == 1  # 无冗余事件
+    assert len(db.list_relations()) == 1
+    # relations 表里的 attrs_json 是规范化（sort_keys）形式
+    assert db.list_relations()[0]["attrs_json"] == '{"强度": "稳固", "性质": "盟友"}'
