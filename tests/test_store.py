@@ -1,5 +1,5 @@
 import json
-from novel_kg.store import DB
+from novel_kg.store import DB, relation_label
 
 
 def test_store_roundtrip_chapters_extractions_entities_relations(tmp_path):
@@ -36,3 +36,16 @@ def test_store_roundtrip_chapters_extractions_entities_relations(tmp_path):
     # 统计
     counts = {r["type"]: r["n"] for r in db.entity_counts()}
     assert counts["人物"] == 1 and counts["势力"] == 1
+
+
+def test_relation_label_uses_specific_relation_when_present():
+    # attrs 有具体关系 -> 显示具体关系；兼容 LLM 偶尔用的英文键
+    assert relation_label({"type": "关系", "attrs_json": '{"关系": "父子"}'}) == "父子"
+    assert relation_label({"type": "关系", "attrs_json": '{"relation": "兄弟"}'}) == "兄弟"
+
+
+def test_relation_label_falls_back_to_type_when_no_detail():
+    # attrs 空 / None -> 回退到 type（所属/持有/修炼/敌对，以及没填具体的"关系"）
+    assert relation_label({"type": "所属", "attrs_json": "{}"}) == "所属"
+    assert relation_label({"type": "修炼", "attrs_json": None}) == "修炼"
+    assert relation_label({"type": "关系", "attrs_json": "{}"}) == "关系"

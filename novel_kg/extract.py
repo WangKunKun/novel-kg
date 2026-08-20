@@ -7,19 +7,21 @@ from novel_kg.models import ChapterExtraction
 def build_system_prompt(schema: SchemaConfig) -> str:
     lines = ["你是一个小说信息抽取助手。从给定章节中抽取实体和关系，严格只返回 JSON。"]
 
-    lines.append("\n【实体类型】及字段：")
+    lines.append("\n【实体类型】及字段（判别标准必须遵守，拿不准归入最接近的一类）：")
     for name, defn in schema.entity_types.items():
         extra = f"；分类维度{defn.classify_by}" if defn.classify_by else ""
-        lines.append(f"- {name}：字段{defn.fields}{extra}")
+        desc = f"。{defn.description}" if defn.description else ""
+        lines.append(f"- {name}：字段{defn.fields}{extra}{desc}")
 
     if schema.classification_dimensions:
         lines.append("\n【分类维度可选值】（取值必须来自下列，未知则留空，禁止编造）：")
         for dim, vals in schema.classification_dimensions.items():
             lines.append(f"- {dim}：{', '.join(vals)}")
 
-    lines.append("\n【关系类型】（type 取下列之一，from_name/to_name 用本章出现的实体名）：")
+    lines.append("\n【关系类型】（type 取下列之一，from_name/to_name 用本章出现的实体名，端点实体类型必须匹配）：")
     for rt in schema.relation_types:
-        lines.append(f"- {rt.name}：{rt.from_type} -> {rt.to_type}")
+        desc = f"（{rt.description}）" if rt.description else ""
+        lines.append(f"- {rt.name}：{rt.from_type} -> {rt.to_type}{desc}")
 
     lines.append(
         "\n【输出 JSON 格式】\n"

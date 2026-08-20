@@ -33,6 +33,21 @@ class OpenAICompatibleClient:
             kwargs["api_key"] = api_key
         self.client = OpenAI(**kwargs)
         self.model = model
+        # 累计 token 统计（含上下文缓存命中），供调用方报告节省情况
+        self.prompt_tokens = 0
+        self.completion_tokens = 0
+        self.cache_hit_tokens = 0
+
+    def record_usage(self, usage: Any) -> None:
+        """累加一次调用的 token 统计，兼容智谱 prompt_cache_hit_tokens
+        与 OpenAI 风格 prompt_tokens_details.cached_tokens。"""
+        d = usage if isinstance(usage, dict) else usage.model_dump()
+        self.prompt_tokens += d.get("prompt_tokens", 0)
+        self.completion_tokens += d.get("completion_tokens", 0)
+        hit = d.get("prompt_cache_hit_tokens")
+        if not hit:
+            hit = (d.get("prompt_tokens_details") or {}).get("cached_tokens", 0)
+        self.cache_hit_tokens += hit or 0
 
     def complete_json(self, system: str, user: str) -> dict[str, Any]:
         import json
@@ -49,6 +64,8 @@ class OpenAICompatibleClient:
                     ],
                     response_format={"type": "json_object"},
                 )
+                if resp.usage:
+                    self.record_usage(resp.usage)
                 return json.loads(resp.choices[0].message.content)
             except Exception as e:  # noqa: BLE001 - 重试包装，需捕获全部瞬时错误
                 last_err = e

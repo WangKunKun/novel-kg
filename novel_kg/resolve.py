@@ -12,7 +12,8 @@ def _new_id(prefix: str) -> str:
 
 
 def _rel_id(from_id: str, to_id: str, type_: str) -> str:
-    """确定性关系 id：同样的 (from,to,type) 只产生一行（跨章也不重复），图谱边唯一。"""
+    """确定性关系 id：同样的 (from,to,type) 只产生一行（跨章也不重复），图谱边唯一。
+    截断长度必须是 12：存量库即 12 位，改长改短都会导致重放时 id 不一致插重复行。"""
     key = f"{from_id}|{to_id}|{type_}"
     return f"rel_{hashlib.md5(key.encode()).hexdigest()[:12]}"
 
@@ -28,6 +29,13 @@ def resolve_extraction(
         if eid is None:
             for a in aliases:
                 eid = db.find_entity_id(type_, a)
+                if eid is not None:
+                    break
+        if eid is None:
+            # 同名但 type 不同：复用已有实体，防止同名双行
+            # （库内 type 已人工修正过，优先于 LLM 单章判断）
+            for cand in [name, *aliases]:
+                eid = db.find_entity_id_any(cand)
                 if eid is not None:
                     break
         if eid is None:

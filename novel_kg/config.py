@@ -4,6 +4,8 @@ from pydantic import BaseModel, Field
 class EntityTypeDef(BaseModel):
     fields: list[str] = Field(default_factory=list)
     classify_by: list[str] = Field(default_factory=list)
+    # 类型定义/判别标准，渲染进抽取 prompt，帮 LLM 区分易混类型
+    description: str = ""
 
 
 class RelationTypeDef(BaseModel):

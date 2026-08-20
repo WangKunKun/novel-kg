@@ -8,11 +8,17 @@ from novel_kg.store import DB
 
 
 def run_pipeline(
-    novel_path: str, schema_path: str, db_path: str, client: LLMClient
+    novel_path: str,
+    schema_path: str,
+    db_path: str,
+    client: LLMClient,
+    limit: int | None = None,
 ) -> DB:
     schema = load_config(schema_path)
     db = DB(db_path)
     chapters = read_novel(novel_path)
+    if limit is not None:
+        chapters = chapters[:limit]  # 只处理前 N 章（试跑/控成本）
 
     # 1) 章节入库
     for ch in chapters:

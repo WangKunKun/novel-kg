@@ -1,6 +1,6 @@
 import json
 
-from novel_kg.store import DB
+from novel_kg.store import DB, relation_label
 
 
 def generate_report(db: DB) -> str:
@@ -37,5 +37,5 @@ def generate_report(db: DB) -> str:
     for rel in rels[:200]:  # 报告里截断，全量看可视化
         a = name_by_id.get(rel["from_id"], "?")
         b = name_by_id.get(rel["to_id"], "?")
-        lines.append(f"- {a} --{rel['type']}--> {b}")
+        lines.append(f"- {a} --{relation_label(rel)}--> {b}")
     return "\n".join(lines)

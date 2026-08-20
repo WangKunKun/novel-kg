@@ -1,7 +1,16 @@
+import os
+import sys
+
+# 允许直接 `streamlit run novel_kg/viz_app.py` 从项目根启动：streamlit
+# 执行脚本时只把脚本所在目录加入 sys.path，不含项目根，会导致
+# `from novel_kg.store import DB` 找不到包。这里手动把项目根（本文件
+# 所在目录的上一级）加入模块搜索路径。
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import streamlit as st
 from pyvis.network import Network
 
-from novel_kg.store import DB
+from novel_kg.store import DB, relation_label
 
 
 def load_graph(db: DB, entity_type: str | None = None,
@@ -18,7 +27,10 @@ def load_graph(db: DB, entity_type: str | None = None,
 def render_network(entities: list[dict], rels: list[dict]) -> Network:
     type_colors = {"人物": "#e6194b", "势力": "#3cb44b", "仙基": "#4363d8",
                    "道具": "#f58231"}
-    net = Network(height="600px", width="100%", bgcolor="#ffffff")
+    # cdn_resources="in_line"：把 vis-network 的 JS 内联进 HTML，避免在
+    # streamlit 的受限 iframe 里加载远程 CDN 失败导致图谱区域空白
+    net = Network(height="600px", width="100%", bgcolor="#ffffff",
+                  cdn_resources="in_line")
     name_by_id = {}
     for e in entities:
         name_by_id[e["id"]] = e["name"]
@@ -26,7 +38,7 @@ def render_network(entities: list[dict], rels: list[dict]) -> Network:
                      color=type_colors.get(e["type"], "#999999"),
                      title=f"{e['type']}｜{e['name']}")
     for r in rels:
-        net.add_edge(r["from_id"], r["to_id"], label=r["type"], title=r.get("evidence", ""))
+        net.add_edge(r["from_id"], r["to_id"], label=relation_label(r), title=r.get("evidence", ""))
     return net
 
 

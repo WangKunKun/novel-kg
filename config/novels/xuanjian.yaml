@@ -6,9 +6,18 @@ entity_types:
   仙基:
     classify_by: [五行, 品阶, 传承]
     fields: [作用, 修炼者, 副作用]
+    description: 筑基修士的根基本身，必须是"轮"（如青元轮、周行轮、玉京轮）。修炼功法、气类物品、小术法都不是仙基。
+  功法:
+    classify_by: [五行, 品阶, 传承]
+    fields: [作用, 修炼者, 副作用]
+    description: 成体系的修炼方法典籍，名字常以诀/经/秘旨/法结尾（如天元练气诀、太阴吐纳养轮经、青元养轮法）。判断标准：是被长期诵习修炼的方法体系，不是施展一次的法术，也不是"轮"本身。
+  术法:
+    fields: [作用, 施展者, 消耗]
+    description: 施展型的法术技能，名字常以术结尾（如净衣术、灵雨术、驱邪术），也包括避水法、灵中符法这类一次性施放的小法术。判断标准：用时施展、不用则已的技能。
   道具:
     classify_by: [品阶]
     fields: [类型, 作用, 当前持有者, 简介]
+    description: 各种物品，包括灵物、符箓、丹药，以及突破用的气类灵物（如夜月凛气、太阴月华、太阴玄光、玄珠符种）。名字带气/月华/玄光且需采集服用的突破资源归道具，不是仙基也不是功法。
 relation_types:
   - name: 所属
     from_type: 人物
@@ -16,10 +25,20 @@ relation_types:
     description: 人物所属势力
   - name: 修炼
     from_type: 人物
+    to_type: 功法
+    description: 人物长期诵习某功法
+  - name: 修成
+    from_type: 人物
     to_type: 仙基
+    description: 人物筑基修成某轮（仙基）
+  - name: 施展
+    from_type: 人物
+    to_type: 术法
+    description: 人物施展某术法
   - name: 持有
     from_type: 人物
     to_type: 道具
+    description: 人物持有某道具
   - name: 关系
     from_type: 人物
     to_type: 人物

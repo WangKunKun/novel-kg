@@ -52,3 +52,31 @@ def test_pipeline_resumes_skipping_extracted_chapters(tmp_path):
     # 第二次跑：应复用已有抽取，不再调用 LLM
     run_pipeline(str(novel), "config/novels/xuanjian.yaml", db_path, fake)
     assert len(fake.calls) == first_calls
+
+
+def test_pipeline_limit_only_processes_first_n_chapters(tmp_path):
+    sample = """====== 第1章 a ======
+正文一
+
+====== 第2章 b ======
+正文二
+
+====== 第3章 c ======
+正文三
+"""
+    novel = tmp_path / "book.txt"
+    novel.write_text(sample, encoding="utf-8")
+    db_path = str(tmp_path / "t.db")
+
+    fake = FakeLLMClient(response={"entities": [], "relations": []})
+    db = run_pipeline(
+        novel_path=str(novel),
+        schema_path="config/novels/xuanjian.yaml",
+        db_path=db_path,
+        client=fake,
+        limit=2,
+    )
+    assert db.has_extraction(1)
+    assert db.has_extraction(2)
+    assert not db.has_extraction(3)  # 第3章未抽取
+    assert len(fake.calls) == 2  # 只调用 2 次 LLM
