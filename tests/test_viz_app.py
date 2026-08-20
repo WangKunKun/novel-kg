@@ -44,3 +44,22 @@ def test_evolution_text_formats_chapters():
         {"chapter": 40, "attrs_json": '{"性质": "敌对"}'},
     ]
     assert evolution_text(hist) == "10章:附庸 → 40章:敌对"
+
+
+def test_render_network_evolution_hover_title():
+    from novel_kg.viz_app import render_network
+
+    entities = [
+        {"id": "S1", "type": "势力", "name": "李家"},
+        {"id": "S2", "type": "势力", "name": "镜铁山"},
+    ]
+    rels = [{"from_id": "S1", "to_id": "S2", "type": "势力关系",
+             "attrs_json": '{"性质": "敌对"}', "evidence": "反目"}]
+    evo = {"S1->S2": "10章:附庸 → 40章:敌对"}
+    net = render_network(entities, rels, evo)
+    title = net.edges[0]["title"]
+    assert title.startswith("演变：10章:附庸 → 40章:敌对")
+    assert "证据：反目" in title
+    # 无演变时退回纯证据
+    net2 = render_network(entities, rels)
+    assert net2.edges[0]["title"] == "反目"

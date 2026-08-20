@@ -78,6 +78,8 @@ def main() -> None:
         evolution = {}
         for r in rels:
             hist = db.relation_history(r["from_id"], r["to_id"])
+            if as_of:
+                hist = [h for h in hist if h["chapter"] <= as_of]
             if len(hist) > 1:
                 evolution[f"{r['from_id']}->{r['to_id']}"] = evolution_text(hist)
         net = render_network(entities, rels, evolution)
@@ -88,6 +90,8 @@ def main() -> None:
     # 关系演变面板
     st.subheader("📖 关系演变时间线")
     ent_names = sorted(e["name"] for e in db.list_entities())
+    if not ent_names:
+        st.write("（暂无实体）")
     c1, c2 = st.columns(2)
     a = c1.selectbox("实体甲", ent_names)
     b = c2.selectbox("实体乙", ent_names)
