@@ -180,7 +180,7 @@ class DB:
 
 def relation_label(rel: dict) -> str:
     """生成关系的可读标签：优先用 attrs 里的具体关系（父子/兄弟/夫妻…），
-    没有则回退到 type（所属/持有/修炼/敌对）。兼容 LLM 偶尔用的英文键。"""
+    没有则回退到 type（所属/持有/修炼/势力关系）。兼容 LLM 偶尔用的英文键。"""
     attrs = json.loads(rel.get("attrs_json") or "{}")
     details = [str(v) for v in attrs.values() if v]
     return "、".join(details) if details else rel["type"]

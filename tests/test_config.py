@@ -9,3 +9,13 @@ def test_load_config_parses_entity_types_and_taxonomy():
     assert cfg.taxonomy_parents["五行"]["玄水"] == "水"
     names = [rt.name for rt in cfg.relation_types]
     assert "所属" in names and "克制" in names
+
+
+def test_faction_relation_type_replaces_hostile():
+    cfg = load_config("config/novels/xuanjian.yaml")
+    names = [rt.name for rt in cfg.relation_types]
+    assert "势力关系" in names
+    assert "敌对" not in names
+    fr = next(rt for rt in cfg.relation_types if rt.name == "势力关系")
+    assert fr.from_type == "势力" and fr.to_type == "势力"
+    assert "attrs" in fr.description  # 性质须写 attrs 的约束要在描述里

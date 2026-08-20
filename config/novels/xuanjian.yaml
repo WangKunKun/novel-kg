@@ -46,9 +46,10 @@ relation_types:
   - name: 克制
     from_type: 仙基
     to_type: 仙基
-  - name: 敌对
+  - name: 势力关系
     from_type: 势力
     to_type: 势力
+    description: 势力间关系，具体性质（结盟/附庸/联姻/敌对/贸易/雇佣/联防/决裂等，用规范短词）写进 attrs；同一对势力的关系随剧情变化时，也要抽取当前最新状态
 classification_dimensions:
   五行: [金, 木, 水, 火, 土]
   品阶: [凡品, 灵品, 仙品]
