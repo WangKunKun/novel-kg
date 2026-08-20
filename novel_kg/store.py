@@ -49,6 +49,17 @@ CREATE TABLE IF NOT EXISTS extractions (
 );
 CREATE INDEX IF NOT EXISTS idx_alias ON aliases(alias);
 CREATE INDEX IF NOT EXISTS idx_entity_type_name ON entities(type, name);
+CREATE TABLE IF NOT EXISTS relation_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    rid TEXT,
+    from_id TEXT,
+    to_id TEXT,
+    type TEXT,
+    attrs_json TEXT,
+    chapter INTEGER,
+    evidence TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_rel_events_pair ON relation_events(from_id, to_id, id);
 """
 
 
@@ -158,6 +169,60 @@ class DB:
     def list_relations(self) -> list[dict]:
         return [dict(r) for r in self.conn.execute("SELECT * FROM relations").fetchall()]
 
+    # ---------- 关系事件流（时变） ----------
+    def record_relation_event(self, rid: str, from_id: str, to_id: str, type_: str,
+                              attrs_json: str, chapter: int, evidence: str) -> None:
+        self.conn.execute(
+            "INSERT INTO relation_events(rid,from_id,to_id,type,attrs_json,chapter,evidence) "
+            "VALUES(?,?,?,?,?,?,?)",
+            (rid, from_id, to_id, type_, attrs_json, chapter, evidence),
+        )
+        self.conn.commit()
+
+    def latest_relation_event(self, from_id: str, to_id: str) -> sqlite3.Row | None:
+        return self.conn.execute(
+            "SELECT * FROM relation_events WHERE from_id=? AND to_id=? "
+            "ORDER BY id DESC LIMIT 1",
+            (from_id, to_id),
+        ).fetchone()
+
+    def relation_history(self, from_id: str, to_id: str) -> list[dict]:
+        return [
+            dict(r)
+            for r in self.conn.execute(
+                "SELECT * FROM relation_events WHERE from_id=? AND to_id=? ORDER BY id",
+                (from_id, to_id),
+            ).fetchall()
+        ]
+
+    def relations_as_of(self, chapter: int) -> list[dict]:
+        """第 chapter 章时的关系图：每对取 chapter<=X 的最新事件。"""
+        return [
+            dict(r)
+            for r in self.conn.execute(
+                "SELECT e.* FROM relation_events e JOIN "
+                "(SELECT from_id, to_id, MAX(id) AS max_id FROM relation_events "
+                " WHERE chapter<=? GROUP BY from_id, to_id) last "
+                "ON e.id = last.max_id",
+                (chapter,),
+            ).fetchall()
+        ]
+
+    def list_relation_events(self, type_: str | None = None) -> list[dict]:
+        if type_:
+            rows = self.conn.execute(
+                "SELECT * FROM relation_events WHERE type=?", (type_,)
+            ).fetchall()
+        else:
+            rows = self.conn.execute("SELECT * FROM relation_events").fetchall()
+        return [dict(r) for r in rows]
+
+    def max_relation_chapter(self) -> int:
+        row = self.conn.execute(
+            "SELECT MAX(chapter) AS m FROM relation_events"
+        ).fetchone()
+        return row["m"] or 0
+
     # ---------- 查询（报告/可视化用） ----------
     def entity_counts(self) -> list[dict]:
         return [
@@ -184,3 +249,13 @@ def relation_label(rel: dict) -> str:
     attrs = json.loads(rel.get("attrs_json") or "{}")
     details = [str(v) for v in attrs.values() if v]
     return "、".join(details) if details else rel["type"]
+
+
+def evolution_text(history: list[dict]) -> str:
+    """事件流拼成"10章:附庸 → 40章:敌对"式摘要；attrs 值取顿号拼接。"""
+    parts = []
+    for h in history:
+        attrs = json.loads(h.get("attrs_json") or "{}")
+        desc = "、".join(str(v) for v in attrs.values() if v)
+        parts.append(f"{h['chapter']}章:{desc or h['type']}")
+    return " → ".join(parts)

@@ -49,3 +49,48 @@ def test_relation_label_falls_back_to_type_when_no_detail():
     assert relation_label({"type": "所属", "attrs_json": "{}"}) == "所属"
     assert relation_label({"type": "修炼", "attrs_json": None}) == "修炼"
     assert relation_label({"type": "关系", "attrs_json": "{}"}) == "关系"
+
+
+def test_relation_events_record_latest_history_and_as_of(tmp_path):
+    from novel_kg.store import DB
+
+    db = DB(str(tmp_path / "ev.db"))
+    db.record_relation_event("rel_a", "S1", "S2", "势力关系",
+                             '{"性质": "附庸"}', 10, "称臣")
+    db.record_relation_event("rel_a", "S1", "S2", "势力关系",
+                             '{"性质": "敌对"}', 40, "反目")
+    db.record_relation_event("rel_b", "S2", "S3", "势力关系",
+                             '{"性质": "结盟"}', 20, "会盟")
+
+    # latest：每对取最新
+    assert db.latest_relation_event("S1", "S2")["attrs_json"] == '{"性质": "敌对"}'
+    assert db.latest_relation_event("S2", "S3")["attrs_json"] == '{"性质": "结盟"}'
+    assert db.latest_relation_event("S3", "S1") is None
+
+    # history：按时间正序
+    hist = db.relation_history("S1", "S2")
+    assert [h["chapter"] for h in hist] == [10, 40]
+
+    # as_of：时间旅行——第 30 章时 S1->S2 还是附庸
+    as_of_30 = db.relations_as_of(30)
+    pair = [r for r in as_of_30 if r["from_id"] == "S1" and r["to_id"] == "S2"]
+    assert pair[0]["attrs_json"] == '{"性质": "附庸"}'
+    # 第 50 章时已反目
+    as_of_50 = db.relations_as_of(50)
+    pair = [r for r in as_of_50 if r["from_id"] == "S1" and r["to_id"] == "S2"]
+    assert pair[0]["attrs_json"] == '{"性质": "敌对"}'
+    # 第 5 章时还没有任何 S1->S2 关系
+    assert not [r for r in db.relations_as_of(5)
+                if r["from_id"] == "S1" and r["to_id"] == "S2"]
+
+
+def test_relation_events_list_by_type_and_max_chapter(tmp_path):
+    from novel_kg.store import DB
+
+    db = DB(str(tmp_path / "ev2.db"))
+    db.record_relation_event("rel_a", "S1", "S2", "势力关系", '{}', 10, "x")
+    db.record_relation_event("rel_b", "P1", "S1", "所属", '{}', 12, "y")
+
+    assert len(db.list_relation_events("势力关系")) == 1
+    assert len(db.list_relation_events()) == 2
+    assert db.max_relation_chapter() == 12
