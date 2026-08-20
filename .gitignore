@@ -1,8 +1,7 @@
 __pycache__/
 *.pyc
 .pytest_cache/
-data/*.db
+# novel.db 提交进库：多机同步分析进度（2026-08-20 起约定）
 .venv/
 .env
-data/*.db.bak*
 lib/
