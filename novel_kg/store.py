@@ -160,8 +160,10 @@ class DB:
     def upsert_relation(self, rid: str, from_id: str, to_id: str, type_: str,
                         attrs_json: str, chapter: int, evidence: str) -> None:
         self.conn.execute(
-            "INSERT OR IGNORE INTO relations(id,from_id,to_id,type,attrs_json,chapter,evidence) "
-            "VALUES(?,?,?,?,?,?,?)",
+            "INSERT INTO relations(id,from_id,to_id,type,attrs_json,chapter,evidence) "
+            "VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET "
+            "attrs_json=excluded.attrs_json, chapter=excluded.chapter, "
+            "evidence=excluded.evidence",
             (rid, from_id, to_id, type_, attrs_json, chapter, evidence),
         )
         self.conn.commit()

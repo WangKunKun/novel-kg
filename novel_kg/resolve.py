@@ -18,6 +18,11 @@ def _rel_id(from_id: str, to_id: str, type_: str) -> str:
     return f"rel_{hashlib.md5(key.encode()).hexdigest()[:12]}"
 
 
+def _norm_attrs(attrs: dict[str, str]) -> str:
+    """attrs 规范化序列化：变化检测的比较基准。"""
+    return json.dumps(attrs, sort_keys=True, ensure_ascii=False)
+
+
 def resolve_extraction(
     db: DB, schema: SchemaConfig, chapter_idx: int, ext: ChapterExtraction
 ) -> None:
@@ -76,7 +81,22 @@ def resolve_extraction(
             or db.find_entity_id_any(r.to_name)
         )
         if from_id and to_id:
-            db.upsert_relation(
-                _rel_id(from_id, to_id, r.type), from_id, to_id, r.type,
-                json.dumps(r.attrs, ensure_ascii=False), chapter_idx, r.evidence,
+            rid = _rel_id(from_id, to_id, r.type)
+            latest = db.latest_relation_event(from_id, to_id)
+            unchanged = (
+                latest is not None
+                and latest["type"] == r.type
+                and latest["attrs_json"] == _norm_attrs(r.attrs)
             )
+            if not unchanged:
+                attrs_json = json.dumps(r.attrs, ensure_ascii=False)
+                # 每对至多一条当前边：type 变化时旧边作废
+                db.conn.execute(
+                    "DELETE FROM relations WHERE from_id=? AND to_id=? AND id<>?",
+                    (from_id, to_id, rid),
+                )
+                db.record_relation_event(rid, from_id, to_id, r.type,
+                                         attrs_json, chapter_idx, r.evidence)
+                db.upsert_relation(rid, from_id, to_id, r.type,
+                                   attrs_json, chapter_idx, r.evidence)
+                db.conn.commit()
