@@ -42,7 +42,9 @@ def main() -> None:
     dup_names = [
         r["name"]
         for r in conn.execute(
-            "SELECT name FROM entities GROUP BY name HAVING COUNT(DISTINCT type)>1"
+            # 同名即算双行：同名不同 type（语义分叉）与同名同 type
+            # （历史 (type,name) 归并前的遗留）都处理
+            "SELECT name FROM entities GROUP BY name HAVING COUNT(*)>1"
         )
     ]
     print(f"双行名字 {len(dup_names)} 个：{dup_names}")
@@ -150,7 +152,7 @@ def main() -> None:
                 )
     print("落库完成")
     for row in conn.execute(
-        "SELECT COUNT(*) c FROM (SELECT name FROM entities GROUP BY name HAVING COUNT(DISTINCT type)>1)"
+        "SELECT COUNT(*) c FROM (SELECT name FROM entities GROUP BY name HAVING COUNT(*)>1)"
     ):
         print(f"  剩余双行: {row['c']}")
 
