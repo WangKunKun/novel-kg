@@ -63,3 +63,48 @@ def test_render_network_evolution_hover_title():
     # 无演变时退回纯证据
     net2 = render_network(entities, rels)
     assert net2.edges[0]["title"] == "反目"
+
+
+def test_person_rank_stage_order():
+    from novel_kg.viz_app import person_rank
+
+    assert person_rank("") == 0                      # 未知
+    assert person_rank("练气三层") == 3
+    assert person_rank("练气七层") == 7
+    assert person_rank("练气中期（约五六层）") == 6   # 括号近似层数也取值
+    assert person_rank("胎息巅峰") == 10
+    assert person_rank("筑基") == 12
+    assert person_rank("玉京轮修士（已在升阳府凝聚灵轮）") == 12  # 轮名=筑基段
+
+
+def test_faction_rank_keyword_order():
+    from novel_kg.viz_app import faction_rank
+
+    assert faction_rank("仙府") == 9
+    assert faction_rank("门派（七门之一）") == 8
+    assert faction_rank("凡人国度") == 7
+    assert faction_rank("郡中修仙家族") == 5          # 长词优先于"家族"
+    assert faction_rank("家族") == 4
+    assert faction_rank("黎泾村第一大姓") == 3
+    assert faction_rank("") == 0
+    assert faction_rank("某个未知组织") == 1
+
+
+def test_render_network_node_size_by_rank():
+    from novel_kg.viz_app import render_network
+
+    entities = [
+        {"id": "P1", "type": "人物", "name": "筑基修士",
+         "attrs_json": '{"境界": "筑基"}'},
+        {"id": "P2", "type": "人物", "name": "凡人",
+         "attrs_json": '{"境界": ""}' },
+        {"id": "F1", "type": "势力", "name": "某仙府",
+         "attrs_json": '{"层级": "仙府"}'},
+    ]
+    net = render_network(entities, [])
+    sizes = {n["id"]: n["size"] for n in net.nodes}
+    assert sizes["P1"] > sizes["P2"]     # 筑基 > 未知
+    assert sizes["F1"] == 10 + 9 * 2     # 仙府层级 9
+    titles = {n["id"]: n["title"] for n in net.nodes}
+    assert "境界：筑基" in titles["P1"]
+    assert "境界" not in titles["P2"]    # 空境界不显示行

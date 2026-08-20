@@ -7,10 +7,57 @@ import sys
 # 所在目录的上一级）加入模块搜索路径。
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import json
+
 import streamlit as st
 from pyvis.network import Network
 
 from novel_kg.store import DB, evolution_text, relation_label
+
+
+def person_rank(jingjie: str) -> int:
+    """人物境界 → 等级分（节点大小映射用）：未知 0，炼气 1-9 按层数，胎息 10，筑基 12。
+    轮名（玉京轮/玄景轮等）即已凝聚仙基的筑基修士，归 12 段。"""
+    if not jingjie:
+        return 0
+    if "筑基" in jingjie or "轮" in jingjie:
+        return 12
+    if "胎息" in jingjie:
+        return 10
+    if "炼气" in jingjie or "练气" in jingjie:
+        cn = "零一二三四五六七八九"
+        for i in range(1, 10):
+            if f"{i}层" in jingjie or f"{cn[i]}层" in jingjie:
+                return i
+        return 1
+    return 0
+
+
+# 势力层级关键词 → 等级分，从前往后第一个命中生效（长词在前防误配）
+FACTION_RANKS: list[tuple[str, int]] = [
+    ("仙府", 9), ("宗门", 8), ("宗", 8), ("门派", 8), ("七门", 8),
+    ("国", 7), ("世家大族", 6), ("世家", 6), ("修仙家族", 5),
+    ("坊市", 4), ("家族", 4), ("大户", 3), ("村", 3), ("峰", 2), ("旁支", 2),
+]
+
+
+def faction_rank(level: str) -> int:
+    """势力层级文本 → 等级分，未识别 1。"""
+    if not level:
+        return 0
+    for kw, rank in FACTION_RANKS:
+        if kw in level:
+            return rank
+    return 1
+
+
+def node_size(type_: str, attrs: dict) -> int:
+    """节点大小：人物按境界、势力按层级线性放大，其余类型默认。"""
+    if type_ == "人物":
+        return 8 + round(person_rank(str(attrs.get("境界", ""))) * 20 / 12)
+    if type_ == "势力":
+        return 10 + faction_rank(str(attrs.get("层级", ""))) * 2
+    return 15
 
 
 def load_graph(db: DB, entity_type: str | None = None,
@@ -37,9 +84,17 @@ def render_network(entities: list[dict], rels: list[dict],
     name_by_id = {}
     for e in entities:
         name_by_id[e["id"]] = e["name"]
+        attrs = json.loads(e.get("attrs_json") or "{}")
+        # 悬停第二行带境界/层级原始文本
+        sub = ""
+        if e["type"] == "人物" and attrs.get("境界"):
+            sub = f"\n境界：{attrs['境界']}"
+        elif e["type"] == "势力" and attrs.get("层级"):
+            sub = f"\n层级：{attrs['层级']}"
         net.add_node(e["id"], label=e["name"],
                      color=type_colors.get(e["type"], "#999999"),
-                     title=f"{e['type']}｜{e['name']}")
+                     size=node_size(e["type"], attrs),
+                     title=f"{e['type']}｜{e['name']}{sub}")
     for r in rels:
         key = f"{r['from_id']}->{r['to_id']}"
         evo = (evolution or {}).get(key)
