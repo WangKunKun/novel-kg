@@ -123,6 +123,20 @@ MERGE = {
     "灵猴": "白猴",  # ch343 救下的于家捣药灵猴=ch347"洗去了一身炭灰，浑身毛发雪白"的老猴
     "善修禅教": "禅教",  # ch279"善修禅教，竟然庇护一魔修食人"是对禅教的讽称，非新教派
     "北方释教": "释教",  # ch337"北方释教是上下死气沉沉"=ch190 释教（释教本在北方）
+    # —— 批次5（352-376 章）——
+    "元思老祖": "萧元思",  # ch352"元思老祖更是事事躬亲"=萧家老祖萧元思（已自带该别名）
+    "元素": "元素真人",  # ch353"光靠迟步梓和元素两人"=青池紫府元素真人（ch354"元素真人…常年镇守南疆"）
+    "重浊": "如重浊",  # ch353"如重浊与洞泉声可勾不动这样多的筑基"——命神通拟人化指称，误建为人物；如重浊（术法）另有实体
+    "宁师兄": "宁和靖",  # ch356 宁和靖=青池远刑峰峰主（迟炙云族弟），ch339 城中训斥邓予之者即他
+    "李妃": "李妃若",  # ch362 全章只作"李妃若"，前缀碎片
+    "血遁": "血遁术",  # ch360"因为血遁和大伤"=李玄宣 ch341 所使血遁术
+    "元修": "元修真人",  # ch372"元乌、元素、元修三位真人"
+    "元乌": "唐元乌",  # ch354"元乌真人…得道白发真修"与"青池余下四紫府…唐元乌"同段互指；ch372"元乌…真人"
+    "元乌峰主": "唐元乌",  # ch239/245 元乌峰主=峰上真人（郁慕仙师承），即元乌真人=唐元乌
+    "重挲马": "重挲",  # ch330 李渊平坐骑"号称「重挲」"，ch371/376 重挲马同一匹
+    "乌涂": "乌涂山",  # ch374"李渊蛟依旧在乌涂闭关"=ch328"回乌涂山闭关修炼"
+    "碧元铜精": "翠元铜精",  # ch374/375 灵泉底矿即 ch348 翠元铜精（灵碧矿），碧/翠异写；两实体互挂别名
+    "金瓜锤": "金瓜",  # ch334"李汶一手抓着一个大如人首的金瓜"=ch374"拿着两个金瓜锤的李汶"，同一对锤
 }
 # 黎山(78) 是"黎泾山"口语简称（原文两词混用指同一座山），库中无黎泾山实体，改名建主名
 # 批次3：如怜=萧家女（197章萧元思家议嫁，与如誉=萧如誉同族同式，库中无萧如怜实体）
@@ -169,6 +183,27 @@ ALIAS_DROP = [
     ("玉符", "玉佩"),
     ("猪二", "猪妖"),
     ("法慧", "怒目相"),
+    # —— 批次5（352-376 章）——
+    ("谷烟坊", "谷烟大漠"),  # ch362"西边大漠里的谷烟坊"——坊在大漠之中，部分-整体非别名（谷烟大漠另有实体）
+    ("紫府中年人", "裘姓修士"),  # 全书唯一的"裘姓修士"是 ch341-365 练气巅峰魔修裘籍，非 ch106 大厥庭黑袍中年人
+]
+
+# 批次5 补充别名（为既有实体补别名供重放归并；配套下方 REL_MOVE）
+ALIAS_ADD = [
+    ("裘姓魔修", "裘姓修士"),  # ch341 抽取名"裘姓修士"、ch364 建实体"裘姓魔修"（ch365 自报名"裘籍"）同一人
+]
+
+# 批次5 关系改挂（源实体在指定章的关系/事件整体改挂到目标实体）：
+# ch340-341 冠云峰坊市的黑纱修士=裘籍（追杀李玄宣、杀李渊云、持术雷玉珠），
+# 其边被"黑袍修士"类别名误挂到紫府中年人（ch106 大厥庭那位，紫府修为，与裘籍毫无关系）
+REL_MOVE = [
+    ("紫府中年人", "裘姓魔修", (340, 341)),
+]
+
+# 批次5 误挂关系删除（错边且无正确目标实体）：
+# ch314 寒云峰洞府把玩玉镯的黑袍中年人是练气二层的无名散修（非紫府中年人、非裘籍），"持有玉镯"边错挂
+REL_DROP = [
+    ("紫府中年人", (314,)),
 ]
 
 # 批次4 排除项（核查过不并）：
@@ -182,6 +217,15 @@ ALIAS_DROP = [
 # - 唐师兄(293)≠唐元乌(331)：与郁慕仙论金销洞者 vs 北方名人列举，无直接证据
 # - 老夫人(282)/黑衣修士(289)/黑衣男子(312)/萧家修士(342)：未具名但指称具体的角色，留待后文命名再定
 # - 大陵(347)是道统（"大陵道统绝矣"），与功法"江河大陵经"分立
+# 批次5 排除项（核查过不并）：
+# - 渌水午元符语性(360,仙基)≠渌水午元符语丹(284,功法)：ch284 功法名末字"丹"、ch360 金性名【…性】，
+#   原文两处括号名末字不同、所指层次不同（功法 vs 金性），非异写
+# - 燕国(363)≠燕赵之国(190)：辽河寺在燕国、慕容夏被遣"回燕国"，与"北方大国唯有燕赵"(325)关系待后证
+# - 巫术(357)/大黎山妖族(352)：泛称，循前例暂留
+# - 血盈盈鉴子(364)≠鉴子(2)：后者是仙鉴本体（别名玄鉴/法鉴），前者是魔修的红镜法器
+# - 越王(367)≠越国(25)：人称/国称分立；元乌峰(52,势力)与唐元乌(人)分立
+# - 安景明的头颅(366,道具)与安景明(人物)分立；濮家家主/水府仙官未具名留待
+# - 李汶的金瓜(334)已并金瓜锤；李七郎、司徒氏、孔氏等本批新人无碎片
 
 
 def rel_id(from_id: str, to_id: str, type_: str) -> str:
@@ -270,10 +314,21 @@ def main() -> None:
         else:
             print(f"  跳过剔别名 {name}（实体缺失）")
 
+    plan_alias_add = [(n, eid(n), a) for n, a in ALIAS_ADD if eid(n)]
+    plan_rel_move = [
+        (src, s, dst, d, chs)
+        for src, dst, chs in REL_MOVE
+        if (s := eid(src)) and (d := eid(dst)) and s != d
+    ] or []
+    plan_rel_drop = [(n, eid(n), chs) for n, chs in REL_DROP if eid(n)]
+
     print(f"待合并 {len(plan_merge)}：{[(f, t) for f, _, t, _ in plan_merge]}")
     print(f"待改名 {len(plan_rename)}：{[(o, n) for o, _, n in plan_rename]}")
     print(f"待删除 {len(plan_del)}：{[n for n, _ in plan_del]}")
     print(f"待剔别名 {len(plan_alias_drop)}：{plan_alias_drop}")
+    print(f"待补别名 {len(plan_alias_add)}：{plan_alias_add}")
+    print(f"待改挂 {len(plan_rel_move)}：{[(s, d, c) for s, _, d, _, c in plan_rel_move]}")
+    print(f"待删边 {len(plan_rel_drop)}：{plan_rel_drop}")
     if dry:
         return
 
@@ -300,6 +355,48 @@ def main() -> None:
         for name, i, alias in plan_alias_drop:
             conn.execute("DELETE FROM aliases WHERE entity_id=? AND alias=?", (i, alias))
             print(f"  剔别名 {name} <- {alias}")
+        # 补充别名（重放归并用）
+        for name, i, alias in plan_alias_add:
+            conn.execute("INSERT OR IGNORE INTO aliases(entity_id,alias) VALUES(?,?)", (i, alias))
+            print(f"  补别名 {name} <- {alias}")
+        # 关系/事件按章改挂（迁移逻辑同 migrate 的关系部分，去重后更新或删除）
+        for src, s, dst, d, chs in plan_rel_move:
+            ph = ",".join("?" * len(chs))
+            for r in conn.execute(
+                f"SELECT * FROM relations WHERE (from_id=? OR to_id=?) AND chapter IN ({ph})",
+                (s, s, *chs),
+            ).fetchall():
+                nf = d if r["from_id"] == s else r["from_id"]
+                nt = d if r["to_id"] == s else r["to_id"]
+                nid = rel_id(nf, nt, r["type"])
+                if conn.execute("SELECT 1 FROM relations WHERE id=?", (nid,)).fetchone():
+                    conn.execute("DELETE FROM relations WHERE id=?", (r["id"],))
+                else:
+                    conn.execute(
+                        "UPDATE relations SET id=?, from_id=?, to_id=? WHERE id=?",
+                        (nid, nf, nt, r["id"]),
+                    )
+            conn.execute(
+                f"UPDATE relation_events SET from_id=? WHERE from_id=? AND chapter IN ({ph})",
+                (d, s, *chs),
+            )
+            conn.execute(
+                f"UPDATE relation_events SET to_id=? WHERE to_id=? AND chapter IN ({ph})",
+                (d, s, *chs),
+            )
+            print(f"  改挂 {src} -> {dst}（章 {chs}）")
+        # 误挂关系删除（实体两端连同事件）
+        for name, s, chs in plan_rel_drop:
+            ph = ",".join("?" * len(chs))
+            conn.execute(
+                f"DELETE FROM relations WHERE (from_id=? OR to_id=?) AND chapter IN ({ph})",
+                (s, s, *chs),
+            )
+            conn.execute(
+                f"DELETE FROM relation_events WHERE (from_id=? OR to_id=?) AND chapter IN ({ph})",
+                (s, s, *chs),
+            )
+            print(f"  删边 {name}（章 {chs}）")
         # raw_json 剔除 DELETE 实体及其关系 + ALIAS_DROP 别名（重放时不再复活）
         for row in conn.execute("SELECT chapter, raw_json FROM extractions").fetchall():
             data = json.loads(row["raw_json"])
