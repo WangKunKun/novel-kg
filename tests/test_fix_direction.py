@@ -69,3 +69,55 @@ def test_merge_opposite_duplicate_edges():
         "JOIN entities e2 ON r.to_id=e2.id WHERE r.attrs_json LIKE '%父子%' "
         "AND e1.name='甲父' AND e2.name='甲'").fetchone()[0]
     assert n == 1  # 合并为一条
+
+
+def test_events_repointed_on_swap_and_merge():
+    sys.path.insert(0, "scripts")
+    from fix_relation_direction import apply_fixes, plan_fixes
+
+    conn = _setup()
+    # 甲→甲父 swap 目标边 + 各挂一条事件
+    conn.execute(
+        "INSERT INTO relation_events(rid, from_id, to_id, type, attrs_json, chapter, evidence) "
+        "VALUES ('r_甲_甲父_父子','p_甲','p_甲父','关系','{\"关系\": \"父子\"}',2,'')")
+    # 反向重复边 + 事件
+    add_rel(conn, "甲父", "甲", "父子", chapter=3)
+    conn.execute(
+        "INSERT INTO relation_events(rid, from_id, to_id, type, attrs_json, chapter, evidence) "
+        "VALUES ('r_甲父_甲_父子','p_甲父','p_甲','关系','{\"关系\": \"父子\"}',3,'')")
+    swap, _ = plan_fixes(conn)
+    apply_fixes(conn, swap)
+    rows = conn.execute(
+        "SELECT rid, from_id, to_id FROM relation_events WHERE attrs_json LIKE '%父子%'").fetchall()
+    # swap 分支：rid 改为 md5 新 id，端点同步为 甲父→甲
+    sw = [r for r in rows if r["from_id"] == "p_甲父" and r["to_id"] == "p_甲"]
+    assert sw and all(r["rid"].startswith("rel_") for r in sw)
+    # 合并分支：原 r_甲父_甲_父子 的事件也改挂新 rid + 端点方向正确
+    assert not any(r["rid"] == "r_甲父_甲_父子" for r in rows)
+    assert all(r["from_id"] == "p_甲父" for r in rows if r["rid"].startswith("rel_"))
+    # 两条事件挂同一条保留边
+    kept = {r["rid"] for r in rows}
+    assert len(kept) == 1
+
+
+def test_merge_skipped_on_kind_mismatch():
+    sys.path.insert(0, "scripts")
+    from fix_relation_direction import apply_fixes, plan_fixes
+
+    conn = _setup()
+    # 反向存在同 pair 但不同 kind 的边（祖孙），占住 rel_id(甲父,甲,关系) 的 md5 id
+    # ——构造方式：直接把反向父子边改成祖孙 kind
+    add_rel(conn, "甲父", "甲", "祖孙", chapter=3)
+    # 手工把它的 id 改成 rel_id(p_甲父, p_甲, 关系) 以占位
+    import hashlib
+    rid = "rel_" + hashlib.md5("p_甲父|p_甲|关系".encode()).hexdigest()[:12]
+    conn.execute("UPDATE relations SET id=? WHERE id='r_甲父_甲_祖孙'", (rid,))
+    conn.commit()
+    swap, _ = plan_fixes(conn)
+    assert any(a == "p_甲" and b == "p_甲父" for a, b in swap)
+    apply_fixes(conn, swap)
+    # 父子边未被删除（方向仍错但保留），祖孙边未被动
+    n = conn.execute(
+        "SELECT COUNT(*) FROM relations r JOIN entities e1 ON r.from_id=e1.id "
+        "JOIN entities e2 ON r.to_id=e2.id WHERE r.attrs_json LIKE '%父子%'").fetchone()[0]
+    assert n >= 1  # 甲→甲父 父子还在（未合并未删除）

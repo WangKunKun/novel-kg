@@ -8,6 +8,10 @@
 
 用法：
     .venv/bin/python scripts/fix_relation_direction.py data/novel.db [--dry-run]
+
+人工核查结论（真库执行后在此记录，格式参考 scripts/merge_alias_fragments.py）：
+- （待 Task 7 填写）
+注：本脚本不防重放复活——从 raw_json 重建库后需重跑。
 """
 import hashlib
 import json
@@ -74,15 +78,15 @@ def plan_fixes(conn) -> tuple[list, list]:
         a, b = r["from_id"], r["to_id"]
         ra = _bio_signal(bios.get(a, ""), names.get(b, ""))
         rb = _bio_signal(bios.get(b, ""), names.get(a, ""))
-        a_is_from = None
-        if ra == "child" or rb == "parent":
-            a_is_from = False
-        elif ra == "parent" or rb == "child":
-            a_is_from = True
-        elif ra == "apprentice" or rb == "master":
-            a_is_from = False
-        elif ra == "master" or rb == "apprentice":
-            a_is_from = True
+        # 分别从 ra/rb 推出 "a 为 from"，两侧同时有信号且矛盾 → 人工核查
+        cand_a = {"child": False, "parent": True,
+                  "apprentice": False, "master": True}.get(ra)
+        cand_b = {"parent": False, "child": True,
+                  "master": False, "apprentice": True}.get(rb)
+        if cand_a is not None and cand_b is not None and cand_a != cand_b:
+            review.append((a, b))
+            continue
+        a_is_from = cand_a if cand_a is not None else cand_b
         if a_is_from is None:
             review.append((a, b))
         elif a_is_from is False:
@@ -90,8 +94,14 @@ def plan_fixes(conn) -> tuple[list, list]:
     return swap, review
 
 
-def apply_fixes(conn, swap) -> None:
-    """交换端点+重算 id；撞 id 的重复边合并（事件 rid 改挂保留边）。"""
+def apply_fixes(conn, swap) -> list:
+    """交换端点+重算 id；撞 id 的重复边合并（事件 rid 改挂保留边）。
+
+    返回因 kind 不一致跳过合并的 (from_id, to_id) 列表（方向未改，需人工核查）。
+    """
+    skipped_kinds = []
+    names = {r["id"]: r["name"] for r in conn.execute(
+        "SELECT id, name FROM entities WHERE type='人物'")}
     with conn:
         for a, b in swap:
             rows = conn.execute(
@@ -99,8 +109,8 @@ def apply_fixes(conn, swap) -> None:
                 (a, b)).fetchall()
             for r in rows:
                 new_id = rel_id(b, a, r["type"])
-                # 目标方向已有的同 kind 边（无论 id 风格）→ 重复边，合并到它
                 kind = edge_kind(r["attrs_json"])
+                # 目标方向已有的同 kind 边（无论 id 风格）→ 重复边，合并到它
                 dup = None
                 for cand in conn.execute(
                     "SELECT id, attrs_json FROM relations WHERE from_id=? AND to_id=? "
@@ -109,13 +119,26 @@ def apply_fixes(conn, swap) -> None:
                     if edge_kind(cand["attrs_json"]) == kind:
                         dup = cand["id"]
                         break
-                target = new_id if dup is None else dup
-                hit = conn.execute("SELECT 1 FROM relations WHERE id=?", (target,)).fetchone()
-                if hit:
-                    conn.execute("UPDATE relation_events SET rid=? WHERE rid=?",
-                                 (target, r["id"]))
+                # 占住 new_id 的其它边（id 不含 kind，可能是同 pair 不同 kind）
+                occupant = conn.execute(
+                    "SELECT attrs_json FROM relations WHERE id=? AND id<>?",
+                    (new_id, r["id"])).fetchone()
+                if occupant is not None and edge_kind(occupant["attrs_json"]) != kind:
+                    print(f"  kind 不一致，跳过合并：{names.get(a, a)}—{names.get(b, b)}"
+                          f"（当前 {kind} vs 目标 {edge_kind(occupant['attrs_json'])}），请人工核查")
+                    skipped_kinds.append((a, b))
+                    continue
+                if dup is not None or occupant is not None:
+                    # 合并：保留边统一改为规范 new_id（dup 为旧风格 id 时归一）
+                    if dup is not None and dup != new_id:
+                        conn.execute("UPDATE relation_events SET rid=? WHERE rid=?",
+                                     (new_id, dup))
+                        conn.execute("UPDATE relations SET id=? WHERE id=?",
+                                     (new_id, dup))
+                    conn.execute("UPDATE relation_events SET rid=?, from_id=?, to_id=? "
+                                 "WHERE rid=?", (new_id, b, a, r["id"]))
                     conn.execute("DELETE FROM relations WHERE id=?", (r["id"],))
-                    print(f"  合并重复边 {r['id']} → {target}（方向相反已存在）")
+                    print(f"  合并重复边 {r['id']} → {new_id}（方向相反已存在）")
                 else:
                     conn.execute(
                         "UPDATE relations SET id=?, from_id=?, to_id=? WHERE id=?",
@@ -123,6 +146,7 @@ def apply_fixes(conn, swap) -> None:
                     conn.execute("UPDATE relation_events SET rid=?, from_id=?, to_id=? "
                                  "WHERE rid=?", (new_id, b, a, r["id"]))
                     print(f"  交换 {a} -> {b} 为 {b} -> {a}")
+    return skipped_kinds
 
 
 def main() -> None:
@@ -138,7 +162,11 @@ def main() -> None:
     print(f"待人工核查 {len(review)} 条")
     if dry:
         return
-    apply_fixes(conn, swap)
+    skipped = apply_fixes(conn, swap)
+    if skipped:
+        print(f"未处理（kind 不一致）{len(skipped)} 条，请人工核查：")
+        for a, b in skipped:
+            print(f"  {names.get(a, a)} — {names.get(b, b)}")
     if review:
         p = Path("docs/reports/relation-direction-review.md")
         p.parent.mkdir(parents=True, exist_ok=True)
