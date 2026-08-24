@@ -14,6 +14,8 @@ def make_db():
         attrs_json TEXT, first_chapter INTEGER, confidence REAL, status TEXT);
     CREATE TABLE relations (id TEXT PRIMARY KEY, from_id TEXT, to_id TEXT, type TEXT,
         attrs_json TEXT, chapter INTEGER, evidence TEXT);
+    CREATE TABLE relation_events (id INTEGER PRIMARY KEY AUTOINCREMENT, rid TEXT,
+        from_id TEXT, to_id TEXT, type TEXT, attrs_json TEXT, chapter INTEGER, evidence TEXT);
     """
     )
     return conn
