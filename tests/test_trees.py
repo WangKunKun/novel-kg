@@ -203,6 +203,22 @@ def test_render_master_tree_foreign_style(master_db):
     assert ":::foreign" in mm                             # 外节点样式（mermaid 节点级）
 
 
+def test_master_tree_dangling_apprentice_tolerated(fam_db):
+    from novel_kg.trees import build_master_tree
+
+    add_person(fam_db, "甲师父", chapter=100)
+    add_rel(fam_db, "甲师父", "青池宗", "所属", type_="所属")
+    add_person(fam_db, "青池宗", type_="势力")
+    add_rel(fam_db, "甲师父", "幽灵", "师徒", chapter=100)  # 幽灵悬空
+    tree = build_master_tree(fam_db, "青池宗")
+    assert {p.name for p in tree.persons.values()} == {"甲师父"}
+    assert any("悬空" in i for i in tree.issues)
+    # 渲染不崩溃
+    from novel_kg.trees import render_dot, render_mermaid
+    assert "甲师父" in render_dot(tree)
+    assert "甲师父" in render_mermaid(tree)
+
+
 def test_render_dot_and_mermaid(fam_db):
     from novel_kg.trees import build_family_tree, li_family_members, render_dot, render_mermaid
 

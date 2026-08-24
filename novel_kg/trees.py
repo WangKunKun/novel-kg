@@ -300,8 +300,17 @@ def build_master_tree(conn: sqlite3.Connection, faction_name: str) -> Tree:
         "SELECT r.from_id FROM relations r JOIN entities e ON r.to_id=e.id "
         "WHERE r.type='所属' AND e.name=?", (faction_name,))}
     tree = Tree(title=f"{faction_name}师徒")
-    ma = [(k, a, b) for k, a, b in _kin_edges(conn, MASTER_APPRENTICE)
-          if a in members or b in members]
+    ma = []
+    for k, a, b in _kin_edges(conn, MASTER_APPRENTICE):
+        if a not in members and b not in members:
+            continue
+        if a not in persons_all or b not in persons_all:
+            # 悬空边：端点不在实体表，整条丢弃（防 BFS/渲染 KeyError）
+            na = persons_all[a].name if a in persons_all else a
+            nb = persons_all[b].name if b in persons_all else b
+            tree.issues.append(f"悬空边：{na}—{nb}（端点不在实体表）")
+            continue
+        ma.append((k, a, b))
     inside = set(members)
     for _, a, b in ma:
         inside.add(a)
