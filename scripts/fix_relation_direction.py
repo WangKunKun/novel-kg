@@ -2,7 +2,8 @@
 """2026-08-24 一次性修正：统一"关系"边方向 from=长辈/师 → to=晚辈/徒。
 
 信号优先级：① attrs 简介"X之子/之父/之母/之徒/之师"互指文本（最强）
-② 无信号的长幼/师徒边 → 人工核查清单（docs/reports/relation-direction-review.md）
+② 李家字辈表（LI_GEN_TABLE，原文硬设定）+ 夫妻/兄弟同辈传递定辈分，辈分小者为 from
+③ 仍无信号的长幼/师徒边 → 人工核查清单（docs/reports/relation-direction-review.md）
 对称类（夫妻/兄弟/敌对等）不动。交换端点后按 rel_id(from,to,type) 重算 id，
 撞 id 即方向相反的重复边 → 合并（删旧边，事件 rid 改挂）。幂等可重跑。
 
@@ -63,19 +64,61 @@ def _bio_signal(my_bio: str, other_name: str) -> str | None:
     return None
 
 
+# 信号③：李家字辈表（男名第二字 → 辈分）。原文锚点：2304"男孩取名唤做李玄锋"（玄=2代子）、
+# 10617"你若生了男孩，便从渊，若是女孩，便从清"（渊/清同辈）、10571"李平逸…李谢文的嫡长子，
+# 也是李叶生的嫡孙…如今渊字辈还未长开"（平与渊同辈、谢与玄同辈）、22013"李曦峸正是李渊云
+# 之子，曦月辈的大哥"（曦/月=渊子辈）。根水与木田同辈（24226"木田老祖之庶弟，根水天祖之幼子"）。
+LI_GEN_TABLE = {"木": 1, "根": 1,
+                "长": 2, "通": 2, "项": 2, "尺": 2, "叶": 2,
+                "玄": 3, "谢": 3,
+                "渊": 4, "平": 4, "清": 4,
+                "曦": 5, "月": 5}
+
+
+def _li_gen(name: str) -> int | None:
+    """李家三字名（李X?）按第二字查字辈表；带"之父/之母/之子/的师父"后缀的不查。"""
+    if len(name) != 3 or not name.startswith("李"):
+        return None
+    if name[2] in ("父", "母", "子", "师"):
+        return None
+    return LI_GEN_TABLE.get(name[1])
+
+
+def _gen_closure(names: dict[str, str], kin: list[tuple[str, str, str]]) -> dict[str, int]:
+    """信号②同辈传递：字辈表直接定辈分，夫妻/兄弟边两端同辈迭代扩散。"""
+    gen = {pid: g for pid, g in ((pid, _li_gen(n)) for pid, n in names.items()) if g}
+    changed = True
+    rounds = 0
+    while changed and rounds < 10:
+        changed, rounds = False, rounds + 1
+        for k, a, b in kin:
+            if k in ("夫妻", "兄弟", "兄妹", "姐弟", "族兄弟"):
+                if a in gen and b not in gen:
+                    gen[b] = gen[a]
+                    changed = True
+                elif b in gen and a not in gen:
+                    gen[a] = gen[b]
+                    changed = True
+    return gen
+
+
 def plan_fixes(conn) -> tuple[list, list]:
-    """返回 (需交换的 (from_id,to_id) 列表, 需人工核查的列表)。"""
+    """返回 (需交换的 (from_id,to_id) 列表, 需人工核查的列表)。
+
+    信号优先级：① 简介"X之子/之父"互指 → ② 字辈表/同辈传递定辈分（辈分小者为 from）。
+    """
     bios = _bios(conn)
     names = {r["id"]: r["name"] for r in conn.execute(
         "SELECT id, name FROM entities WHERE type='人物'")}
+    kin = [(edge_kind(r["attrs_json"]), r["from_id"], r["to_id"])
+           for r in conn.execute(
+               "SELECT from_id, to_id, attrs_json FROM relations WHERE type='关系'"
+           ).fetchall()]
+    gens = _gen_closure(names, kin)
     swap, review = [], []
-    for r in conn.execute(
-        "SELECT id, from_id, to_id, attrs_json FROM relations WHERE type='关系'"
-    ).fetchall():
-        kind = edge_kind(r["attrs_json"])
+    for kind, a, b in kin:
         if kind not in ELDER_KINDS and kind not in MASTER_KINDS:
             continue
-        a, b = r["from_id"], r["to_id"]
         ra = _bio_signal(bios.get(a, ""), names.get(b, ""))
         rb = _bio_signal(bios.get(b, ""), names.get(a, ""))
         # 分别从 ra/rb 推出 "a 为 from"，两侧同时有信号且矛盾 → 人工核查
@@ -87,6 +130,11 @@ def plan_fixes(conn) -> tuple[list, list]:
             review.append((a, b))
             continue
         a_is_from = cand_a if cand_a is not None else cand_b
+        if a_is_from is None and kind in ELDER_KINDS:
+            # 信号②③：两端辈分都可定且不等 → 辈分小者（长辈）为 from
+            ga, gb = gens.get(a), gens.get(b)
+            if ga is not None and gb is not None and ga != gb:
+                a_is_from = ga < gb
         if a_is_from is None:
             review.append((a, b))
         elif a_is_from is False:
@@ -123,11 +171,24 @@ def apply_fixes(conn, swap) -> list:
                 occupant = conn.execute(
                     "SELECT attrs_json FROM relations WHERE id=? AND id<>?",
                     (new_id, r["id"])).fetchone()
-                if occupant is not None and edge_kind(occupant["attrs_json"]) != kind:
-                    print(f"  kind 不一致，跳过合并：{names.get(a, a)}—{names.get(b, b)}"
-                          f"（当前 {kind} vs 目标 {edge_kind(occupant['attrs_json'])}），请人工核查")
-                    skipped_kinds.append((a, b))
-                    continue
+                if occupant is not None:
+                    occ_kind = edge_kind(occupant["attrs_json"])
+                    if occ_kind not in ELDER_KINDS and occ_kind not in MASTER_KINDS \
+                            and occ_kind not in ("夫妻", "兄弟", "兄妹", "姐弟", "族兄弟"):
+                        # 弱语义占位（亲属/抚养/依附等）让位强语义：删占位后正常交换
+                        print(f"  弱语义让位：删 {names.get(b, b)}→{names.get(a, a)}"
+                              f"（{occ_kind}），换为 {kind}")
+                        conn.execute("DELETE FROM relations WHERE id=?", (new_id,))
+                        occupant = None  # 已让位，走下方正常交换分支
+                    else:
+                        # 强语义占位（方向已对）：同对每类型只留一条（resolve 不变量），
+                        # 删错向待修边，事件并入占位边
+                        print(f"  同对双强语义：删错向 {names.get(a, a)}→{names.get(b, b)}"
+                              f"（{kind}），保留 {occ_kind}")
+                        conn.execute("UPDATE relation_events SET rid=? WHERE rid=?",
+                                     (new_id, r["id"]))
+                        conn.execute("DELETE FROM relations WHERE id=?", (r["id"],))
+                        continue
                 if dup is not None or occupant is not None:
                     # 合并：保留边统一改为规范 new_id（dup 为旧风格 id 时归一）
                     if dup is not None and dup != new_id:

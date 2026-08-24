@@ -311,6 +311,21 @@ def build_master_tree(conn: sqlite3.Connection, faction_name: str) -> Tree:
             tree.issues.append(f"悬空边：{na}—{nb}（端点不在实体表）")
             continue
         ma.append((k, a, b))
+    # 双向师徒边（A→B 与 B→A 并存，抽取方向矛盾）：保留 chapter 最新一条，
+    # 旧边剔除——否则两人互标为徒，BFS 双双不可达落"无师徒边定位"
+    chap = {(a, b): r["chapter"] for r in conn.execute(
+        "SELECT from_id, to_id, chapter FROM relations WHERE type='关系'")}
+    drop = set()
+    pairs = {(a, b) for k, a, b in ma if k == "师徒"}
+    for a, b in pairs:
+        if (b, a) in pairs and (b, a) not in drop:
+            keep, drop_edge = ((a, b), (b, a)) if chap.get((a, b), 0) >= chap.get((b, a), 0) \
+                else ((b, a), (a, b))
+            drop.add(drop_edge)
+            tree.issues.append(
+                f"师徒双向矛盾：{persons_all[a].name}—{persons_all[b].name}，"
+                f"保留 ch{chap.get(keep, '?')} 边，剔 ch{chap.get(drop_edge, '?')} 边（请人工核实谁为师）")
+    ma = [(k, a, b) for k, a, b in ma if (a, b) not in drop or k != "师徒"]
     inside = set(members)
     for _, a, b in ma:
         inside.add(a)

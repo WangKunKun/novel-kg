@@ -121,3 +121,24 @@ def test_merge_skipped_on_kind_mismatch():
         "SELECT COUNT(*) FROM relations r JOIN entities e1 ON r.from_id=e1.id "
         "JOIN entities e2 ON r.to_id=e2.id WHERE r.attrs_json LIKE '%父子%'").fetchone()[0]
     assert n >= 1  # 甲→甲父 父子还在（未合并未删除）
+
+
+def test_gen_table_and_spouse_propagation():
+    """信号②③：字辈表判向 + 夫妻同辈传递（外姓配偶经字辈对端定向）。"""
+    sys.path.insert(0, "scripts")
+    from fix_relation_direction import plan_fixes
+
+    conn = make_db()
+    add_person(conn, "李木田", chapter=1)
+    add_person(conn, "李玄宣", chapter=2)
+    add_person(conn, "任氏", jianjie="", chapter=3)   # 外姓，无简介信号
+    # 错向：玄→木田 父子（字辈：玄3 > 木1 → 木田为 from → 应交换）
+    add_rel(conn, "李玄宣", "李木田", "父子")
+    # 夫妻同辈传递：玄宣—任氏 夫妻 + 错向母子 任氏→李木田？
+    # 任氏经夫妻边得辈分3，木田辈分1 → 木田为 from → 应交换
+    add_rel(conn, "李玄宣", "任氏", "夫妻")
+    add_rel(conn, "任氏", "李木田", "母子")
+    swap, review = plan_fixes(conn)
+    assert any(a == "p_李玄宣" and b == "p_李木田" for a, b in swap)
+    assert any(a == "p_任氏" and b == "p_李木田" for a, b in swap)
+    assert not review
