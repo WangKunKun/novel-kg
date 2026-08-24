@@ -157,6 +157,52 @@ def test_build_family_tree_multi_parent_reported(fam_db):
     assert tree.persons["p_李玄宣"].generation == 2
 
 
+@pytest.fixture
+def master_db(fam_db):
+    """青池宗：司元白、李尺泾(多重所属)、郁慕仙 为成员；唐元乌、叶秋阳 为外人。"""
+    for name in ("司元白", "唐元乌", "叶秋阳", "郁慕仙"):
+        add_person(fam_db, name, chapter=100)
+    add_person(fam_db, "李尺泾", jingjie="筑基", chapter=3)
+    add_rel(fam_db, "司元白", "李尺泾", "师徒", chapter=100)     # 司→李，双成员
+    add_rel(fam_db, "唐元乌", "郁慕仙", "师徒", chapter=120)     # 唐为外节点
+    add_rel(fam_db, "李项平", "叶秋阳", "师徒", chapter=50)      # 双方都不是成员：不进树
+    add_rel(fam_db, "司元白", "李尺泾", "师兄弟", chapter=99)    # 同门边
+    for m in ("司元白", "李尺泾", "郁慕仙"):
+        add_rel(fam_db, m, "青池宗", "所属", type_="所属")
+    add_rel(fam_db, "李尺泾", "李家", "所属", type_="所属")      # 多重所属
+    add_person(fam_db, "青池宗", type_="势力")
+    return fam_db
+
+
+def test_build_master_tree(master_db):
+    from novel_kg.trees import build_master_tree
+
+    tree = build_master_tree(master_db, "青池宗")
+    names = {p.name for p in tree.persons.values()}
+    # 成员 + 外节点唐元乌；叶秋阳/李项平（非成员边）不进
+    assert names == {"司元白", "李尺泾", "郁慕仙", "唐元乌"}
+    assert tree.persons["p_唐元乌"].foreign is True
+    assert tree.persons["p_司元白"].foreign is False
+    # 师承分层：师0徒1
+    assert tree.persons["p_司元白"].generation == 0
+    assert tree.persons["p_李尺泾"].generation == 1
+    # 李尺泾多重所属：sect 标注青池宗（排除李家）
+    assert tree.persons["p_李尺泾"].sect == "青池宗"
+
+
+def test_render_master_tree_foreign_style(master_db):
+    from novel_kg.trees import build_master_tree, render_dot, render_mermaid
+
+    tree = build_master_tree(master_db, "青池宗")
+    dot = render_dot(tree)
+    assert '[label="师徒", style=dashed]' in dot          # 外节点师徒边虚线
+    assert "style=rounded,dashed" in dot                  # 外节点框虚线
+    assert "同门" in dot                                   # 师兄弟边标签
+    mm = render_mermaid(tree)
+    assert "-->|师徒|" in mm and "---|同门|" in mm
+    assert ":::foreign" in mm                             # 外节点样式（mermaid 节点级）
+
+
 def test_render_dot_and_mermaid(fam_db):
     from novel_kg.trees import build_family_tree, li_family_members, render_dot, render_mermaid
 

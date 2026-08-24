@@ -292,6 +292,55 @@ def build_family_tree(conn: sqlite3.Connection, members: set[str]) -> Tree:
     return tree
 
 
+def build_master_tree(conn: sqlite3.Connection, faction_name: str) -> Tree:
+    """师徒树：成员=所属该势力全部人物（含多重所属）；师徒边任一端是成员即收，
+    外端点作外节点（foreign，不展开其其他关系）。"""
+    persons_all = _load_persons(conn)
+    members = {r["from_id"] for r in conn.execute(
+        "SELECT r.from_id FROM relations r JOIN entities e ON r.to_id=e.id "
+        "WHERE r.type='所属' AND e.name=?", (faction_name,))}
+    tree = Tree(title=f"{faction_name}师徒")
+    ma = [(k, a, b) for k, a, b in _kin_edges(conn, MASTER_APPRENTICE)
+          if a in members or b in members]
+    inside = set(members)
+    for _, a, b in ma:
+        inside.add(a)
+        inside.add(b)
+    # 悬挂引用（端点不在 entities）容忍：只收 persons_all 中存在的 id
+    tree.persons = {pid: persons_all[pid] for pid in inside if pid in persons_all}
+    for pid in inside - members:
+        if pid in tree.persons:
+            tree.persons[pid].foreign = True
+    tree.edges = list(ma)
+
+    # 分层：徒=师+1（师兄弟边不分层）；未作徒者 0 层
+    apprenticed = {b for k, _, b in ma if k == "师徒" and b in tree.persons}
+    masters = [pid for pid in tree.persons if pid not in apprenticed]
+    gen: dict[str, int] = {}
+    q = deque((m, 0) for m in masters)
+    children: dict[str, list[str]] = defaultdict(list)
+    for k, a, b in ma:
+        if k == "师徒":
+            children[a].append(b)
+    while q:
+        cur, g = q.popleft()
+        if cur in gen:
+            continue
+        gen[cur] = g
+        for c in children[cur]:
+            if c not in gen:
+                q.append((c, g + 1))
+    for pid, g in gen.items():
+        tree.persons[pid].generation = g
+    for pid in tree.persons:
+        if pid not in gen:   # 师兄弟边挂进但无师徒定位的同门
+            tree.persons[pid].generation = 0
+            tree.issues.append(f"无师徒边定位：{tree.persons[pid].name}")
+    if not members:
+        tree.issues.append(f"势力「{faction_name}」无成员")
+    return tree
+
+
 def _label(p: Person) -> str:
     """节点标签：名字†[境界·宗门]（境界/宗门缺省则省略对应段）。"""
     parts = [p.name + ("†" if p.dead else "")]
@@ -333,7 +382,8 @@ def render_dot(tree: Tree) -> str:
         elif k == "夫妻":
             lines.append(f'  "{a}" -> "{b}" [arrowhead=none, color=gray];')
         elif k == "师徒":
-            style = ", style=dashed" if tree.persons[b].foreign else ""
+            style = ", style=dashed" if (tree.persons[a].foreign
+                                          or tree.persons[b].foreign) else ""
             lines.append(f'  "{a}" -> "{b}" [label="师徒"{style}];')
         elif k == "师兄弟":
             lines.append(f'  "{a}" -> "{b}" [arrowhead=none, label="同门"];')
@@ -354,8 +404,10 @@ def render_mermaid(tree: Tree) -> str:
         elif k == "夫妻":
             lines.append(f"  {ia} --- {ib}")
         elif k == "师徒":
+            # :::foreign 是节点级样式（mermaid 无边虚线语法），与 dot 的外节点虚框对应
             line = f"  {ia} -->|师徒| {ib}"
-            lines.append(line + (":::foreign" if tree.persons[b].foreign else ""))
+            lines.append(line + (":::foreign" if (tree.persons[a].foreign
+                                                  or tree.persons[b].foreign) else ""))
         elif k == "师兄弟":
             lines.append(f"  {ia} ---|同门| {ib}")
     lines.append("  classDef foreign stroke-dasharray: 5 5;")
