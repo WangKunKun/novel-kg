@@ -381,7 +381,7 @@ def render_dot(tree: Tree) -> str:
     ]
     for pid, p in tree.persons.items():
         style = "rounded,dashed" if p.foreign else "rounded"
-        lines.append(f'  "{pid}" [label="{_dot_label(p)}", style={style}];')
+        lines.append(f'  "{pid}" [label="{_dot_label(p)}", style="{style}"];')
     couples = [(a, b) for k, a, b in tree.edges if k == "夫妻"]
     for a, b in couples:
         lines.append("  {rank=same; " + f'"{a}"; "{b}";}}')

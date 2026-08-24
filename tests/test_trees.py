@@ -196,7 +196,7 @@ def test_render_master_tree_foreign_style(master_db):
     tree = build_master_tree(master_db, "青池宗")
     dot = render_dot(tree)
     assert '[label="师徒", style=dashed]' in dot          # 外节点师徒边虚线
-    assert "style=rounded,dashed" in dot                  # 外节点框虚线
+    assert 'style="rounded,dashed"' in dot                 # 外节点框虚线
     assert "同门" in dot                                   # 师兄弟边标签
     mm = render_mermaid(tree)
     assert "-->|师徒|" in mm and "---|同门|" in mm
@@ -263,3 +263,18 @@ def test_render_dot_and_mermaid(fam_db):
     assert mm.startswith("graph TD")
     assert "-->" in mm and "---" in mm       # 亲子箭头 + 夫妻连线
     assert "李玄宣" in mm and "李木田" in mm
+
+
+def test_render_dot_style_quoted_valid_syntax(master_db):
+    """style 属性值必须带引号（含逗号的 rounded,dashed 否则是非法 dot）。"""
+    import subprocess
+    from novel_kg.trees import build_master_tree, render_dot
+
+    tree = build_master_tree(master_db, "青池宗")
+    dot = render_dot(tree)
+    assert 'style="rounded,dashed"' in dot
+    # 喂给真实 dot 验证语法（环境无 dot 时跳过）
+    import shutil
+    if shutil.which("dot"):
+        subprocess.run(["dot", "-Tsvg"], input=dot.encode("utf-8"),
+                       capture_output=True, check=True)
