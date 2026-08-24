@@ -74,7 +74,7 @@ def test_person_rank_stage_order():
     assert person_rank("练气中期（约五六层）") == 6   # 括号近似层数也取值
     assert person_rank("胎息巅峰") == 10
     assert person_rank("筑基") == 12
-    assert person_rank("玉京轮修士（已在升阳府凝聚灵轮）") == 12  # 轮名=筑基段
+    assert person_rank("玉京轮修士（已在升阳府凝聚灵轮）") == 10  # 轮名=胎息轮（玉京轮巅峰即胎息巅峰，非筑基）
 
 
 def test_faction_rank_keyword_order():

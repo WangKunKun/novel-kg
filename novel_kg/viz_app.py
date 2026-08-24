@@ -17,12 +17,13 @@ from novel_kg.store import DB, evolution_text, relation_label
 
 def person_rank(jingjie: str) -> int:
     """人物境界 → 等级分（节点大小映射用）：未知 0，炼气 1-9 按层数，胎息 10，筑基 12。
-    轮名（玉京轮/玄景轮等）即已凝聚仙基的筑基修士，归 12 段。"""
+    境界文本含轮名（玉京轮/玄景轮等）是胎息期轮次非筑基——原文"化去六轮，
+    凝结为种种道基"，轮属胎息（玉京轮巅峰=胎息巅峰），归 10 段。"""
     if not jingjie:
         return 0
-    if "筑基" in jingjie or "轮" in jingjie:
+    if "筑基" in jingjie:
         return 12
-    if "胎息" in jingjie:
+    if "胎息" in jingjie or "轮" in jingjie:
         return 10
     if "炼气" in jingjie or "练气" in jingjie:
         cn = "零一二三四五六七八九"
@@ -80,7 +81,8 @@ def render_network(entities: list[dict], rels: list[dict],
                    grades: dict[str, str] | None = None) -> Network:
     """evolution: 边演变悬停文本（key "from->to"）；grades: 道具 entity_id→品阶。"""
     type_colors = {"人物": "#e6194b", "势力": "#3cb44b", "仙基": "#4363d8",
-                   "道具": "#f58231", "功法": "#911eb4", "术法": "#46f0f0"}
+                   "轮": "#7aa6da", "道具": "#f58231", "功法": "#911eb4",
+                   "术法": "#46f0f0"}
     # cdn_resources="in_line"：把 vis-network 的 JS 内联进 HTML，避免在
     # streamlit 的受限 iframe 里加载远程 CDN 失败导致图谱区域空白
     net = Network(height="900px", width="100%", bgcolor="#ffffff",
