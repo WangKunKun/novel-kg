@@ -155,3 +155,19 @@ def test_build_family_tree_multi_parent_reported(fam_db):
     tree = build_family_tree(fam_db, li_family_members(fam_db))
     assert any("多父" in i or "多母" in i for i in tree.issues)
     assert tree.persons["p_李玄宣"].generation == 2
+
+
+def test_render_dot_and_mermaid(fam_db):
+    from novel_kg.trees import build_family_tree, li_family_members, render_dot, render_mermaid
+
+    tree = build_family_tree(fam_db, li_family_members(fam_db))
+    dot = render_dot(tree)
+    assert dot.startswith("digraph")
+    assert 'rankdir=TB' in dot
+    assert "李通崖\\n[紫府]" in dot          # 名字+境界（dot label 用 \n 换行）
+    assert "李木田" in dot and "任氏" in dot
+    assert "{rank=same" in dot               # 夫妻同层
+    mm = render_mermaid(tree)
+    assert mm.startswith("graph TD")
+    assert "-->" in mm and "---" in mm       # 亲子箭头 + 夫妻连线
+    assert "李玄宣" in mm and "李木田" in mm

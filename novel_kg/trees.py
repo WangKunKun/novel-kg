@@ -290,3 +290,73 @@ def build_family_tree(conn: sqlite3.Connection, members: set[str]) -> Tree:
         if p.generation is None:
             tree.issues.append(f"未定位代际：{p.name}（无亲子/夫妻/挂靠边），独立置放")
     return tree
+
+
+def _label(p: Person) -> str:
+    """节点标签：名字†[境界·宗门]（境界/宗门缺省则省略对应段）。"""
+    parts = [p.name + ("†" if p.dead else "")]
+    info = "·".join(x for x in (p.jingjie, p.sect) if x)
+    if info:
+        parts.append(f"[{info}]")
+    return "\n".join(parts)
+
+
+def _dot_label(p: Person) -> str:
+    """dot 标签：换行写作字面 \\n（dot 引号串内真实换行非法）。"""
+    return _label(p).replace("\n", "\\n")
+
+
+def _mm_label(p: Person) -> str:
+    return _label(p).replace("\n", "<br/>")
+
+
+def render_dot(tree: Tree) -> str:
+    """graphviz dot 源码：TB 布局，亲子实线箭头，夫妻灰线无箭头同层，外节点虚线。
+
+    edges 中亲子边保留原始性质（父子/母子/父女/母女），统一按实线箭头渲染。
+    """
+    lines = [
+        f'digraph "{tree.title}" {{',
+        "  rankdir=TB;",
+        '  node [shape=box, style=rounded, fontname="PingFang SC"];',
+        '  edge [fontname="PingFang SC"];',
+    ]
+    for pid, p in tree.persons.items():
+        style = "rounded,dashed" if p.foreign else "rounded"
+        lines.append(f'  "{pid}" [label="{_dot_label(p)}", style={style}];')
+    couples = [(a, b) for k, a, b in tree.edges if k == "夫妻"]
+    for a, b in couples:
+        lines.append("  {rank=same; " + f'"{a}"; "{b}";}}')
+    for k, a, b in tree.edges:
+        if k in PARENT_CHILD:
+            lines.append(f'  "{a}" -> "{b}";')
+        elif k == "夫妻":
+            lines.append(f'  "{a}" -> "{b}" [arrowhead=none, color=gray];')
+        elif k == "师徒":
+            style = ", style=dashed" if tree.persons[b].foreign else ""
+            lines.append(f'  "{a}" -> "{b}" [label="师徒"{style}];')
+        elif k == "师兄弟":
+            lines.append(f'  "{a}" -> "{b}" [arrowhead=none, label="同门"];')
+    lines.append("}")
+    return "\n".join(lines)
+
+
+def render_mermaid(tree: Tree) -> str:
+    """mermaid graph TD 源码：节点用 p1/p2 编号 id，label 放引号。"""
+    ids = {pid: f"p{i}" for i, pid in enumerate(tree.persons, 1)}
+    lines = ["graph TD"]
+    for pid, p in tree.persons.items():
+        lines.append(f'  {ids[pid]}["{_mm_label(p)}"]')
+    for k, a, b in tree.edges:
+        ia, ib = ids[a], ids[b]
+        if k in PARENT_CHILD:
+            lines.append(f"  {ia} --> {ib}")
+        elif k == "夫妻":
+            lines.append(f"  {ia} --- {ib}")
+        elif k == "师徒":
+            line = f"  {ia} -->|师徒| {ib}"
+            lines.append(line + (":::foreign" if tree.persons[b].foreign else ""))
+        elif k == "师兄弟":
+            lines.append(f"  {ia} ---|同门| {ib}")
+    lines.append("  classDef foreign stroke-dasharray: 5 5;")
+    return "\n".join(lines)
