@@ -106,3 +106,121 @@ def li_family_members(conn: sqlite3.Connection) -> set[str]:
     spouses = {a if b in li else b for k, a, b in kin if k == "夫妻" and (a in li or b in li)}
     # 夫妻边端点必在连通闭包内，无需再交 closure
     return li | spouses
+
+
+def build_family_tree(conn: sqlite3.Connection, members: set[str]) -> Tree:
+    """族谱树：亲子边拓扑分层；夫妻同层；多父/环进 issues；祖孙/叔侄挂孤儿。"""
+    FATHER = {"父子", "父女"}
+    MOTHER = {"母子", "母女"}
+    persons_all = _load_persons(conn)
+    tree = Tree(
+        title="李氏族谱",
+        persons={pid: persons_all[pid] for pid in members if pid in persons_all},
+    )
+    first_ch = {r["id"]: r["first_chapter"] for r in conn.execute(
+        "SELECT id, first_chapter FROM entities")}
+    kin = _kin_edges(conn, KIN_ALL)
+
+    # 亲子边收集（父系/母系分开处理）；多父/多母 = 同系父边多于一条 → 报告，
+    # 主边取首现最早者（父母各保留一条）
+    pc_by_child: dict[str, list[tuple[str, str]]] = defaultdict(list)  # child -> [(kind, parent)]
+    for k, a, b in kin:
+        if k in PARENT_CHILD and a in tree.persons and b in tree.persons:
+            pc_by_child[b].append((k, a))
+    kept_pc: list[tuple[str, str, str]] = []  # (kind, parent, child)，保留原始性质
+    for child, lst in pc_by_child.items():
+        lst.sort(key=lambda ka: first_ch.get(ka[1], 10**9))
+        for kinds, label in ((FATHER, "多父"), (MOTHER, "多母")):
+            same = [(k, p) for k, p in lst if k in kinds]
+            if len({p for _, p in same}) > 1:
+                names = "、".join(tree.persons[p].name for _, p in same)
+                tree.issues.append(f"{label}：{tree.persons[child].name} 的{label}边指向 "
+                                   f"{names}，主边取首现最早者")
+        kept_kinds: list[str] = []
+        for k, p in lst:
+            if k not in kept_kinds:  # 每系仅留首现最早的一条
+                kept_kinds.append(k)
+                kept_pc.append((k, p, child))
+    tree.edges = [(k, p, c) for k, p, c in kept_pc]
+
+    children: dict[str, list[str]] = defaultdict(list)
+    child_parents: dict[str, list[str]] = defaultdict(list)
+    for _, p, c in kept_pc:
+        children[p].append(c)
+        child_parents[c].append(p)
+    has_parent = set(child_parents)
+
+    # 夫妻边（限树内）
+    spouse_pairs = [(a, b) for k, a, b in kin
+                    if k == "夫妻" and a in tree.persons and b in tree.persons]
+
+    # 根 = 无保留亲子父边、且不通过夫妻挂到有父边的配偶（嫁入者随配偶分层）
+    roots = [pid for pid in tree.persons
+             if pid not in has_parent
+             and not any((pid == a and b in has_parent) or (pid == b and a in has_parent)
+                         for a, b in spouse_pairs)]
+
+    def _relax() -> bool:
+        """沿亲子边松弛分层（child = 1 + max(父辈层)），返回是否全部可达。"""
+        changed = True
+        rounds = 0
+        while changed and rounds <= len(tree.persons) + 1:
+            changed, rounds = False, rounds + 1
+            for pid in roots:
+                if tree.persons[pid].generation is None:
+                    tree.persons[pid].generation = 0
+                    changed = True
+            for child, ps in child_parents.items():
+                gens = [tree.persons[p].generation for p in ps
+                        if tree.persons[p].generation is not None]
+                if gens:  # 至少一个父辈已分层即可先定，后续父辈补层时单调抬高
+                    want = max(gens) + 1
+                    cur = tree.persons[child].generation
+                    if cur is None or want > cur:
+                        tree.persons[child].generation = want
+                        changed = True
+        return all(tree.persons[c].generation is not None for c in child_parents)
+
+    if not _relax():
+        # 环：去掉分层受阻者中首现最晚的一条亲子边后重跑
+        stuck = [c for c in child_parents if tree.persons[c].generation is None]
+        worst = max((e for e in tree.edges if e[2] in stuck and e[0] in PARENT_CHILD),
+                    key=lambda e: first_ch.get(e[2], 0), default=None)
+        if worst:
+            tree.issues.append(
+                f"环：分层受阻于 {tree.persons[worst[2]].name}，去边 "
+                f"{tree.persons[worst[1]].name}→{tree.persons[worst[2]].name} 重试")
+            tree.edges.remove(worst)
+            children[worst[1]].remove(worst[2])
+            ps = child_parents[worst[2]]
+            ps.remove(worst[1])
+            if not ps:
+                del child_parents[worst[2]]
+                has_parent.discard(worst[2])
+            _relax()
+
+    # 夫妻同层（一侧已分层另一侧未分层则对齐；两侧都有层则保持）
+    for _ in range(2):  # 对齐可能让亲子父辈补层，回灌一次
+        for a, b in spouse_pairs:
+            ga, gb = tree.persons[a].generation, tree.persons[b].generation
+            if ga is None and gb is not None:
+                tree.persons[a].generation = gb
+            elif gb is None and ga is not None:
+                tree.persons[b].generation = ga
+        _relax()
+
+    # 孤儿挂靠：祖孙/后裔 +2 代，叔侄/姑侄/舅甥/族叔侄 +1 代
+    for k, a, b in kin:
+        if a in tree.persons and b in tree.persons:
+            delta = 2 if k in GRAND else 1 if k in UNCLE else 0
+            if delta and tree.persons[a].generation is not None \
+                    and tree.persons[b].generation is None:
+                tree.persons[b].generation = tree.persons[a].generation + delta
+
+    # 夫妻边进树（渲染并排）；仍未定位者报告
+    for a, b in spouse_pairs:
+        tree.edges.append(("夫妻", a, b))
+    for pid, p in tree.persons.items():
+        if p.generation is None:
+            tree.issues.append(f"未定位代际：{p.name}（无亲子/夫妻/挂靠边），独立置放")
+    return tree

@@ -99,3 +99,32 @@ def test_person_dead_and_sect_from_load(fam_db):
     assert persons["p_李木田"].dead is False
     assert persons["p_李通崖"].sect == "青池宗"
     assert persons["p_李长湖"].sect == ""  # 无所属边
+
+
+def test_build_family_tree_generations(fam_db):
+    from novel_kg.trees import build_family_tree, li_family_members
+
+    tree = build_family_tree(fam_db, li_family_members(fam_db))
+    g = {tree.persons[pid].name: tree.persons[pid].generation
+         for pid in tree.persons}
+    assert g["李木田"] == 0 and g["李根水"] == 0
+    assert g["李长湖"] == 1 and g["李通崖"] == 1
+    assert g["李玄宣"] == 2 and g["李玄锋"] == 2
+    # 嫁入配偶靠夫妻边同层
+    assert g["任氏"] == 1 and g["田芸"] == 1
+    # 亲子边进树，兄弟边不进（共同父隐含）
+    kinds = {(k, tree.persons[a].name, tree.persons[b].name) for k, a, b in tree.edges}
+    assert ("父子", "李木田", "李通崖") in kinds
+    assert all(k != "兄弟" for k, _, _ in kinds)
+    assert not tree.issues
+
+
+def test_build_family_tree_multi_parent_reported(fam_db):
+    from novel_kg.trees import build_family_tree, li_family_members
+
+    # 给李玄宣再添一个错误父边 → 多父报告且不崩溃
+    add_person(fam_db, "李坏数据", chapter=2)
+    add_rel(fam_db, "李坏数据", "李玄宣", "父子")
+    tree = build_family_tree(fam_db, li_family_members(fam_db))
+    assert any("多父" in i or "多母" in i for i in tree.issues)
+    assert tree.persons["p_李玄宣"].generation == 2
