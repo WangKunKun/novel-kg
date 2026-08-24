@@ -105,6 +105,17 @@ def test_faction_rank_keyword_order():
     assert faction_rank("某个未知组织") == 1
 
 
+def test_faction_rank_power_over_level():
+    from novel_kg.viz_app import faction_rank
+
+    # 顶尖战力优先于组织层级：筑基家族（李家）大于凡人大国（国7→14+…按层级14+7*2? 量纲见 node_size）
+    assert faction_rank("村中家族", "筑基") == 9 > faction_rank("凡人国度", "")  # 7
+    assert faction_rank("仙府", "金丹") == 12 > faction_rank("仙府", "")        # 9
+    assert faction_rank("仙府", "紫府") == 10
+    assert faction_rank("仙府", "胎息") == 5 < faction_rank("仙府", "")        # 弱战力反而压低
+    assert faction_rank("宗门", "练气") == 7
+
+
 def test_render_network_node_size_by_rank():
     from novel_kg.viz_app import render_network
 

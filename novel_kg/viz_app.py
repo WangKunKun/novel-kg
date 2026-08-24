@@ -81,8 +81,18 @@ FACTION_RANKS: list[tuple[str, int]] = [
 ]
 
 
-def faction_rank(level: str) -> int:
-    """势力层级文本 → 等级分，未识别 1。"""
+# 势力顶尖战力 → 等级分：修仙界势力真正的档位由最高战力决定（原文"青池宗和
+# 金羽宗背靠金丹修士"），金丹12 高于仙府层级上限 9——有战力信息的势力优先按战力
+FACTION_POWER = {"元婴": 14, "金丹": 12, "紫府": 10, "筑基": 9,
+                 "练气": 7, "炼气": 7, "胎息": 5, "凡人": 2}
+
+
+def faction_rank(level: str, power: str = "") -> int:
+    """势力等级分：有顶尖战力按战力（金丹12/紫府10/筑基9/练气7/胎息5），
+    无战力信息再按组织层级关键词，未识别 1。"""
+    for kw, r in FACTION_POWER.items():
+        if kw in power:
+            return r
     if not level:
         return 0
     for kw, rank in FACTION_RANKS:
@@ -92,12 +102,13 @@ def faction_rank(level: str) -> int:
 
 
 def node_size(type_: str, attrs: dict, grade: str = "") -> int:
-    """节点大小：人物按境界、势力按层级、道具按品阶，其余默认。"""
+    """节点大小：人物按境界、势力按顶尖战力/层级、道具按品阶，其余默认。"""
     if type_ == "人物":
         # rank 上限 28（元婴），映射到 size 8-28
         return 8 + round(person_rank(str(attrs.get("境界", ""))) * 20 / 28)
     if type_ == "势力":
-        return 10 + faction_rank(str(attrs.get("层级", ""))) * 2
+        return 10 + faction_rank(str(attrs.get("层级", "")),
+                                 str(attrs.get("顶尖战力", ""))) * 2
     if type_ == "道具":
         return {"凡品": 12, "灵品": 15, "仙品": 19}.get(grade, 10)
     return 15
@@ -135,8 +146,13 @@ def render_network(entities: list[dict], rels: list[dict],
         sub = ""
         if e["type"] == "人物" and attrs.get("境界"):
             sub = f"\n境界：{attrs['境界']}"
-        elif e["type"] == "势力" and attrs.get("层级"):
-            sub = f"\n层级：{attrs['层级']}"
+        elif e["type"] == "势力":
+            bits = []
+            if attrs.get("层级"):
+                bits.append(f"层级：{attrs['层级']}")
+            if attrs.get("顶尖战力"):
+                bits.append(f"顶尖战力：{attrs['顶尖战力']}")
+            sub = "\n" + "；".join(bits) if bits else ""
         net.add_node(e["id"], label=e["name"],
                      color=type_colors.get(e["type"], "#999999"),
                      size=node_size(e["type"], attrs, (grades or {}).get(e["id"], "")),
