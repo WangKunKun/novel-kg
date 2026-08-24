@@ -241,7 +241,8 @@ def test_export_family_tree_files(tmp_path, fam_db):
     fdb.commit()
 
     out = tmp_path / "exports"
-    export_tree.run(["族谱", "--db", str(db_path), "--out", str(out)])
+    rc = export_tree.run(["族谱", "--db", str(db_path), "--out", str(out)])
+    assert rc == 0
     md = (out / "李氏族谱.md").read_text(encoding="utf-8")
     assert "graph TD" in md and "李木田" in md
     if shutil.which("dot"):

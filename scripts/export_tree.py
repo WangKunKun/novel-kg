@@ -53,12 +53,18 @@ def run(argv: list[str]) -> int:
     dot_src = render_dot(tree)
     (out_dir / f"{name}.md").write_text(
         f"# {tree.title}\n\n```mermaid\n{render_mermaid(tree)}\n```\n", encoding="utf-8")
+    failed = False
     if shutil.which("dot"):
-        for fmt in ("svg", "png"):
-            subprocess.run(
-                ["dot", f"-T{fmt}", "-o", str(out_dir / f"{name}.{fmt}")],
-                input=dot_src.encode("utf-8"), check=True)
-        print(f"已导出 {out_dir}/{name}.svg/.png/.md")
+        try:
+            for fmt in ("svg", "png"):
+                subprocess.run(
+                    ["dot", f"-T{fmt}", "-o", str(out_dir / f"{name}.{fmt}")],
+                    input=dot_src.encode("utf-8"), check=True)
+            print(f"已导出 {out_dir}/{name}.svg/.png/.md")
+        except subprocess.CalledProcessError as e:
+            print(f"dot 渲染 {e.cmd[1]} 失败（退出码 {e.returncode}），"
+                  f"Mermaid 已导出：{out_dir}/{name}.md", file=sys.stderr)
+            failed = True
     else:
         print("未找到系统 dot，仅导出 Mermaid（brew install graphviz 可补图片）")
     if tree.issues:
@@ -66,7 +72,7 @@ def run(argv: list[str]) -> int:
             f"# {tree.title} 数据问题\n\n" + "\n".join(f"- {i}" for i in tree.issues),
             encoding="utf-8")
         print(f"发现 {len(tree.issues)} 条数据问题，见 {name}.issues.md")
-    return 0
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":
