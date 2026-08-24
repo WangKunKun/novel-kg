@@ -18,12 +18,18 @@ FAMILY_FACTIONS = {"李家", "黎泾村"}   # sect 标注时排除的血脉家�
 LI_SEEDS = {"李木田", "李根水"}        # 圈定种子（李家最早血脉）
 
 
+def _attrs_json(raw: str | None) -> dict:
+    """解析 attrs_json，坏 JSON/None 一律回退 {}。"""
+    try:
+        d = json.loads(raw or "{}")
+    except (json.JSONDecodeError, TypeError):
+        return {}
+    return d if isinstance(d, dict) else {}
+
+
 def edge_kind(attrs_json: str | None) -> str:
     """从边 attrs 提取亲属性质，兼容两种键，"敌对（击杀）"→"敌对"。"""
-    try:
-        d = json.loads(attrs_json or "{}")
-    except (json.JSONDecodeError, TypeError):
-        return ""
+    d = _attrs_json(attrs_json)
     for k in KIN_KEYS:
         v = str(d.get(k, "") or "").split("（")[0]
         if v:
@@ -53,7 +59,7 @@ class Tree:
 def _load_persons(conn: sqlite3.Connection) -> dict[str, Person]:
     persons = {}
     for r in conn.execute("SELECT id, name, attrs_json FROM entities WHERE type='人物'"):
-        attrs = json.loads(r["attrs_json"] or "{}")
+        attrs = _attrs_json(r["attrs_json"])
         persons[r["id"]] = Person(
             id=r["id"], name=r["name"],
             jingjie=str(attrs.get("境界", "") or "").split("（")[0],
@@ -61,7 +67,7 @@ def _load_persons(conn: sqlite3.Connection) -> dict[str, Person]:
         )
     for r in conn.execute(
         "SELECT r.from_id, e.name FROM relations r JOIN entities e ON r.to_id=e.id "
-        "WHERE r.type='所属'"
+        "WHERE r.type='所属' ORDER BY r.chapter, r.id"
     ):
         p = persons.get(r["from_id"])
         if p and r["name"] not in FAMILY_FACTIONS and not p.sect:
@@ -98,4 +104,5 @@ def li_family_members(conn: sqlite3.Connection) -> set[str]:
     # 过滤：李姓保留；非李姓仅当与李姓成员有夫妻边
     li = {pid for pid in closure if id2name[pid].startswith("李")}
     spouses = {a if b in li else b for k, a, b in kin if k == "夫妻" and (a in li or b in li)}
-    return li | (spouses & closure)
+    # 夫妻边端点必在连通闭包内，无需再交 closure
+    return li | spouses

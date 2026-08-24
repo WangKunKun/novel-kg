@@ -71,3 +71,31 @@ def test_li_family_members_includes_spouse_excludes_stranger(fam_db):
     assert names == {"李木田", "李根水", "李长湖", "李通崖", "田芸", "任氏",
                      "李玄宣", "李玄锋"}
     assert "李妃若" not in names
+
+
+def test_edge_kind_key_fallback_and_paren_strip():
+    from novel_kg.trees import edge_kind
+    import json as _j
+    assert edge_kind(_j.dumps({"关系": "父子"}, ensure_ascii=False)) == "父子"
+    assert edge_kind(_j.dumps({"性质": "父子"}, ensure_ascii=False)) == "父子"  # 键回退
+    assert edge_kind(_j.dumps({"关系": "敌对（击杀）"}, ensure_ascii=False)) == "敌对"  # 去括号
+    assert edge_kind(None) == ""
+    assert edge_kind("not-json{") == ""
+
+
+def test_person_dead_and_sect_from_load(fam_db):
+    from novel_kg.trees import DEAD_KEYWORDS, _load_persons
+    # 殁者：简介含死亡关键词
+    from tests.test_trees import add_person
+    add_person(fam_db, "亡者甲", jianjie="战死于南疆", chapter=10)
+    # sect：所属边排除血脉家族（李家），取第一个宗门
+    from tests.test_trees import add_rel
+    add_person(fam_db, "青池宗", type_="势力")
+    add_person(fam_db, "李家", type_="势力")
+    add_rel(fam_db, "李通崖", "李家", "所属", type_="所属", chapter=4)
+    add_rel(fam_db, "李通崖", "青池宗", "所属", type_="所属", chapter=5)
+    persons = _load_persons(fam_db)
+    assert persons["p_亡者甲"].dead is True
+    assert persons["p_李木田"].dead is False
+    assert persons["p_李通崖"].sect == "青池宗"
+    assert persons["p_李长湖"].sect == ""  # 无所属边
