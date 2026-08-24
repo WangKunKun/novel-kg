@@ -15,22 +15,61 @@ from pyvis.network import Network
 from novel_kg.store import DB, evolution_text, relation_label
 
 
+# 胎息六轮即胎息六层（低→高）。原文锚点：5118"胎息一层的玄景轮"、936"胎息二层承明轮"、
+# 3565"胎息四层青元轮"、5709"胎息五层玉京轮"、5154"胎息六层灵初轮"（灵初为巅峰之轮）；
+# 承明轮 attrs"玄景轮凝聚后从气海穴中自然而生"亦证玄景在最前
+TAIXI_LUN_RANK = {"玄景": 1, "承明": 2, "周行": 3, "青元": 4, "玉京": 5, "灵初": 6}
+
+
+def _layer(text: str) -> int | None:
+    cn = "零一二三四五六七八九"
+    for i in range(1, 10):
+        if f"{i}层" in text or f"{cn[i]}层" in text:
+            return i
+    return None
+
+
 def person_rank(jingjie: str) -> int:
-    """人物境界 → 等级分（节点大小映射用）：未知 0，炼气 1-9 按层数，胎息 10，筑基 12。
-    境界文本含轮名（玉京轮/玄景轮等）是胎息期轮次非筑基——原文"化去六轮，
-    凝结为种种道基"，轮属胎息（玉京轮巅峰=胎息巅峰），归 10 段。"""
+    """人物境界 → 等级分（节点大小映射用）。修仙六境从低到高：
+    胎息 1-6（六轮即六层）< 练气 10-18（按层+10）< 筑基 20-22 < 紫府 24 < 金丹 26 < 元婴 28。
+    原文"六轮养至满月可入练气…化去六轮，凝结为种种道基"——胎息低于练气，轮非筑基。"""
     if not jingjie:
         return 0
+    if "元婴" in jingjie:
+        return 28
+    if "紫府" in jingjie or ("筑基" in jingjie and "远超" in jingjie):
+        return 24
+    if "金丹" in jingjie:
+        return 26
     if "筑基" in jingjie:
-        return 12
+        if "巅峰" in jingjie:
+            return 22
+        if "中期" in jingjie or "后期" in jingjie:
+            return 21
+        return 20
     if "胎息" in jingjie or "轮" in jingjie:
-        return 10
-    if "炼气" in jingjie or "练气" in jingjie:
-        cn = "零一二三四五六七八九"
-        for i in range(1, 10):
-            if f"{i}层" in jingjie or f"{cn[i]}层" in jingjie:
-                return i
+        if "巅峰" in jingjie:
+            return 6
+        n = _layer(jingjie)
+        if n and n <= 6:
+            return n
+        for lun, r in TAIXI_LUN_RANK.items():
+            if lun in jingjie:
+                return r
         return 1
+    if "炼气" in jingjie or "练气" in jingjie:
+        if "巅峰" in jingjie:
+            return 18
+        n = _layer(jingjie)
+        if n:
+            return 10 + n
+        if "后期" in jingjie:
+            return 17
+        if "中期" in jingjie:
+            return 15
+        if "初期" in jingjie:
+            return 12
+        return 11
     return 0
 
 
@@ -55,7 +94,8 @@ def faction_rank(level: str) -> int:
 def node_size(type_: str, attrs: dict, grade: str = "") -> int:
     """节点大小：人物按境界、势力按层级、道具按品阶，其余默认。"""
     if type_ == "人物":
-        return 8 + round(person_rank(str(attrs.get("境界", ""))) * 20 / 12)
+        # rank 上限 28（元婴），映射到 size 8-28
+        return 8 + round(person_rank(str(attrs.get("境界", ""))) * 20 / 28)
     if type_ == "势力":
         return 10 + faction_rank(str(attrs.get("层级", ""))) * 2
     if type_ == "道具":

@@ -68,13 +68,28 @@ def test_render_network_evolution_hover_title():
 def test_person_rank_stage_order():
     from novel_kg.viz_app import person_rank
 
-    assert person_rank("") == 0                      # 未知
-    assert person_rank("练气三层") == 3
-    assert person_rank("练气七层") == 7
-    assert person_rank("练气中期（约五六层）") == 6   # 括号近似层数也取值
-    assert person_rank("胎息巅峰") == 10
-    assert person_rank("筑基") == 12
-    assert person_rank("玉京轮修士（已在升阳府凝聚灵轮）") == 10  # 轮名=胎息轮（玉京轮巅峰即胎息巅峰，非筑基）
+    # 修仙六境从低到高：胎息(1-6) < 练气(10-18) < 筑基(20-22) < 紫府(24) < 金丹(26) < 元婴(28)
+    assert person_rank("") == 0                      # 未知/凡人
+    # 胎息六轮即六层（原文：胎息一层玄景轮/二层承明轮/四层青元轮/五层玉京轮/六层灵初轮）
+    assert person_rank("胎息一层") == 1
+    assert person_rank("胎息二层承明轮") == 2
+    assert person_rank("胎息四层") == 4
+    assert person_rank("胎息五层（玉京轮）") == 5
+    assert person_rank("胎息巅峰") == 6
+    assert person_rank("玄景轮") == 1
+    assert person_rank("玉京轮修士（已在升阳府凝聚灵轮）") == 5
+    assert person_rank("灵初轮") == 6
+    # 练气按层 +10；"五六层"含"六层"子串取 6
+    assert person_rank("练气三层") == 13
+    assert person_rank("练气七层") == 17
+    assert person_rank("练气中期（约五六层）") == 16  # 括号近似层数也取值
+    assert person_rank("练气巅峰") == 18
+    assert person_rank("筑基") == 20
+    assert person_rank("筑基中期") == 21
+    assert person_rank("筑基巅峰") == 22
+    assert person_rank("紫府（欲突破金丹）") == 24   # 紫府分支在金丹前，"欲突破金丹"不误升段
+    assert person_rank("金丹") == 26
+    assert person_rank("远超筑基") == 24
 
 
 def test_faction_rank_keyword_order():
