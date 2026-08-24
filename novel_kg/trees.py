@@ -283,6 +283,24 @@ def build_family_tree(conn: sqlite3.Connection, members: set[str]) -> Tree:
                     and tree.persons[b].generation is None:
                 tree.persons[b].generation = tree.persons[a].generation + delta
 
+    # 挂靠后回灌亲子：父辈经挂靠/对齐补层时，其子可能已被姑侄等弱证据抢先挂错层——
+    # 亲子边是强证据，覆写回父+1（例：谢文经族叔侄挂靠 2 代后，其子平逸应回灌 3 代
+    # 而非随姑母挂靠的 2 代）。两轮覆盖两级链。
+    for _ in range(2):
+        for k, a, b in tree.edges:
+            if k in PARENT_CHILD and tree.persons[a].generation is not None \
+                    and tree.persons[b].generation != tree.persons[a].generation + 1:
+                tree.persons[b].generation = tree.persons[a].generation + 1
+
+    # 回灌后再对齐一轮夫妻：挂靠者的代际来得晚（挂靠在首轮对齐之后），其子女的
+    # 配偶（无亲子边者，如女婿安鹧言）此时才能对齐到配偶层
+    for a, b in spouse_pairs:
+        ga, gb = tree.persons[a].generation, tree.persons[b].generation
+        if ga is None and gb is not None:
+            tree.persons[a].generation = gb
+        elif gb is None and ga is not None:
+            tree.persons[b].generation = ga
+
     # 夫妻边进树（渲染并排）；仍未定位者报告
     for a, b in spouse_pairs:
         tree.edges.append(("夫妻", a, b))
