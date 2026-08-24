@@ -219,6 +219,36 @@ def test_master_tree_dangling_apprentice_tolerated(fam_db):
     assert "甲师父" in render_mermaid(tree)
 
 
+def test_export_family_tree_files(tmp_path, fam_db):
+    """对文件库导出族谱三件套；dot 缺失时至少有 .md（运行时判断，不断言 dot 存在）。"""
+    import shutil
+    import sys
+    sys.path.insert(0, "scripts")
+    import sqlite3 as _s
+    import export_tree
+
+    db_path = tmp_path / "t.db"
+    fdb = _s.connect(db_path)
+    fdb.executescript(
+        "CREATE TABLE entities (id TEXT PRIMARY KEY, type TEXT, name TEXT, canonical_id TEXT,"
+        "attrs_json TEXT, first_chapter INTEGER, confidence REAL, status TEXT);"
+        "CREATE TABLE relations (id TEXT PRIMARY KEY, from_id TEXT, to_id TEXT, type TEXT,"
+        "attrs_json TEXT, chapter INTEGER, evidence TEXT);")
+    for row in fam_db.execute("SELECT * FROM entities"):
+        fdb.execute("INSERT INTO entities VALUES (?,?,?,?,?,?,?,?)", tuple(row))
+    for row in fam_db.execute("SELECT * FROM relations"):
+        fdb.execute("INSERT INTO relations VALUES (?,?,?,?,?,?,?)", tuple(row))
+    fdb.commit()
+
+    out = tmp_path / "exports"
+    export_tree.run(["族谱", "--db", str(db_path), "--out", str(out)])
+    md = (out / "李氏族谱.md").read_text(encoding="utf-8")
+    assert "graph TD" in md and "李木田" in md
+    if shutil.which("dot"):
+        assert (out / "李氏族谱.svg").exists()
+        assert (out / "李氏族谱.png").exists()
+
+
 def test_render_dot_and_mermaid(fam_db):
     from novel_kg.trees import build_family_tree, li_family_members, render_dot, render_mermaid
 
