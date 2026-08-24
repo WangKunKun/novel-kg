@@ -119,6 +119,33 @@ def test_build_family_tree_generations(fam_db):
     assert not tree.issues
 
 
+def test_build_family_tree_cycle_broken_and_reported(fam_db):
+    from novel_kg.trees import build_family_tree, li_family_members
+
+    # 构造环：李玄锋→李木田 错误父边（木田→通崖→玄锋→木田）
+    add_rel(fam_db, "李玄锋", "李木田", "父子")
+    tree = build_family_tree(fam_db, li_family_members(fam_db))
+    assert any("环" in i for i in tree.issues)
+    # 破边规则：去掉指向环内首现最早子端（最可能的真实始祖）的亲子边
+    # → 玄锋→木田 被去掉，木田成为根
+    g = {p.name: p.generation for p in tree.persons.values()}
+    assert g["李木田"] == 0 and g["李通崖"] == 1 and g["李玄锋"] == 2
+
+
+def test_build_family_tree_orphan_adoption(fam_db):
+    from novel_kg.trees import build_family_tree, li_family_members
+
+    # 孤儿：仅祖孙边连接（+2 代）；旁支仅叔侄边（+1 代）
+    add_person(fam_db, "李孤孙", chapter=60)
+    add_person(fam_db, "李旁侄", chapter=61)
+    add_rel(fam_db, "李木田", "李孤孙", "祖孙")
+    add_rel(fam_db, "李木田", "李旁侄", "族叔侄")
+    tree = build_family_tree(fam_db, li_family_members(fam_db))
+    g = {p.name: p.generation for p in tree.persons.values()}
+    assert g["李孤孙"] == 2   # 祖孙 +2
+    assert g["李旁侄"] == 1   # 族叔侄 +1
+
+
 def test_build_family_tree_multi_parent_reported(fam_db):
     from novel_kg.trees import build_family_tree, li_family_members
 

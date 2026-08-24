@@ -136,10 +136,13 @@ def build_family_tree(conn: sqlite3.Connection, members: set[str]) -> Tree:
                 names = "、".join(tree.persons[p].name for _, p in same)
                 tree.issues.append(f"{label}：{tree.persons[child].name} 的{label}边指向 "
                                    f"{names}，主边取首现最早者")
-        kept_kinds: list[str] = []
+        kept_groups: set[str] = set()
         for k, p in lst:
-            if k not in kept_kinds:  # 每系仅留首现最早的一条
-                kept_kinds.append(k)
+            # 同系（父系/母系）仅留首现最早的一条：按性别组去重而非精确性质，
+            # 与上面的多父/多母检测口径一致（父子+父女来自两个不同父=多父，只留一条）
+            grp = "父" if k in FATHER else "母" if k in MOTHER else k
+            if grp not in kept_groups:
+                kept_groups.add(grp)
                 kept_pc.append((k, p, child))
     tree.edges = [(k, p, c) for k, p, c in kept_pc]
 
@@ -154,14 +157,26 @@ def build_family_tree(conn: sqlite3.Connection, members: set[str]) -> Tree:
     spouse_pairs = [(a, b) for k, a, b in kin
                     if k == "夫妻" and a in tree.persons and b in tree.persons]
 
-    # 根 = 无保留亲子父边、且不通过夫妻挂到有父边的配偶（嫁入者随配偶分层）
-    roots = [pid for pid in tree.persons
-             if pid not in has_parent
-             and not any((pid == a and b in has_parent) or (pid == b and a in has_parent)
-                         for a, b in spouse_pairs)]
+    # 根 = 无保留亲子父边、无祖孙/叔侄挂靠长辈、且不通过夫妻挂到有父边的配偶
+    # （嫁入者随配偶分层；仅凭祖孙/叔侄边连接的孤儿不是根，留待挂靠阶段定位）
+    adopted = {b for k, a, b in kin
+               if (k in GRAND or k in UNCLE) and a in tree.persons and b in tree.persons}
 
-    def _relax() -> bool:
-        """沿亲子边松弛分层（child = 1 + max(父辈层)），返回是否全部可达。"""
+    def _find_roots() -> list[str]:
+        return [pid for pid in tree.persons
+                if pid not in has_parent and pid not in adopted
+                and not any((pid == a and b in has_parent) or (pid == b and a in has_parent)
+                            for a, b in spouse_pairs)]
+
+    roots = _find_roots()
+
+    def _relax() -> tuple[bool, bool]:
+        """沿亲子边松弛分层（child = 1 + max(父辈层)）。
+
+        返回 (全部子节点已分层, 触顶时仍想变更)。轮数上限只是防脏数据的
+        护栏而非正确性界：正常 DAG 在 ≤n 轮内收敛；若触顶时 changed 仍为
+        True，说明每轮都在整体抬层 —— 存在从根可达的环，当前代际全是垃圾。
+        """
         changed = True
         rounds = 0
         while changed and rounds <= len(tree.persons) + 1:
@@ -179,17 +194,65 @@ def build_family_tree(conn: sqlite3.Connection, members: set[str]) -> Tree:
                     if cur is None or want > cur:
                         tree.persons[child].generation = want
                         changed = True
-        return all(tree.persons[c].generation is not None for c in child_parents)
+        placed = all(tree.persons[c].generation is not None for c in child_parents)
+        return placed, changed
 
-    if not _relax():
-        # 环：去掉分层受阻者中首现最晚的一条亲子边后重跑
-        stuck = [c for c in child_parents if tree.persons[c].generation is None]
-        worst = max((e for e in tree.edges if e[2] in stuck and e[0] in PARENT_CHILD),
-                    key=lambda e: first_ch.get(e[2], 0), default=None)
-        if worst:
+    placed, still_changing = _relax()
+    if not placed or still_changing:
+        # 环：破边仅执行一次（保证终止，总共至多两次分层）；若去掉的环之外
+        # 还有另一个不相交的环，第二次分层仍受阻，退化为"未定位"报告。
+        if still_changing:  # 可达环已产生垃圾代际，全部清零重来
+            for p in tree.persons.values():
+                p.generation = None
+        # 环成员 = 保留亲子图中的强连通分量（>1 节点或自环）
+        graph: dict[str, list[str]] = defaultdict(list)
+        for _, p, c in kept_pc:
+            graph[p].append(c)
+        index, low, onstk, stack = {}, {}, set(), []
+        sccs: list[set[str]] = []
+
+        def _tarjan(v: str) -> None:
+            work = [(v, 0)]
+            while work:
+                node, ei = work[-1]
+                if ei == 0:
+                    index[node] = low[node] = len(index)
+                    stack.append(node)
+                    onstk.add(node)
+                if ei < len(graph[node]):
+                    work[-1] = (node, ei + 1)
+                    w = graph[node][ei]
+                    if w not in index:
+                        work.append((w, 0))
+                    elif w in onstk:
+                        low[node] = min(low[node], index[w])
+                    continue
+                work.pop()
+                if work:
+                    low[work[-1][0]] = min(low[work[-1][0]], low[node])
+                if low[node] == index[node]:
+                    comp = set()
+                    while True:
+                        w = stack.pop()
+                        onstk.discard(w)
+                        comp.add(w)
+                        if w == node:
+                            break
+                    sccs.append(comp)
+
+        for v in list(graph):
+            if v not in index:
+                _tarjan(v)
+        cyc = {n for comp in sccs if len(comp) > 1
+               for n in comp} | {n for n in graph if n in graph[n]}  # 自环也视为环成员
+        cands = [e for e in tree.edges if e[0] in PARENT_CHILD and e[2] in cyc]
+        if cands:
+            # 破边规则：环内首现最早的子端最可能是真实始祖，指向它的父边
+            # （错误的回指边）最可疑，去掉首现最早的环成员子端上的亲子边
+            worst = min(cands, key=lambda e: first_ch.get(e[2], 10**9))
             tree.issues.append(
-                f"环：分层受阻于 {tree.persons[worst[2]].name}，去边 "
-                f"{tree.persons[worst[1]].name}→{tree.persons[worst[2]].name} 重试")
+                f"环：{tree.persons[worst[1]].name}→{tree.persons[worst[2]].name} "
+                f"成环，去边后以 {tree.persons[worst[2]].name} 为根重试")
             tree.edges.remove(worst)
             children[worst[1]].remove(worst[2])
             ps = child_parents[worst[2]]
@@ -197,6 +260,7 @@ def build_family_tree(conn: sqlite3.Connection, members: set[str]) -> Tree:
             if not ps:
                 del child_parents[worst[2]]
                 has_parent.discard(worst[2])
+            roots = _find_roots()
             _relax()
 
     # 夫妻同层（一侧已分层另一侧未分层则对齐；两侧都有层则保持）
@@ -209,7 +273,9 @@ def build_family_tree(conn: sqlite3.Connection, members: set[str]) -> Tree:
                 tree.persons[b].generation = ga
         _relax()
 
-    # 孤儿挂靠：祖孙/后裔 +2 代，叔侄/姑侄/舅甥/族叔侄 +1 代
+    # 孤儿挂靠：祖孙/后裔 +2 代，叔侄/姑侄/舅甥/族叔侄 +1 代。
+    # 注意挂靠在夫妻对齐之后执行：被挂靠孤儿的配偶不会跟着对齐，保持未定位
+    # （by design——挂靠是弱证据，不向配偶传播）
     for k, a, b in kin:
         if a in tree.persons and b in tree.persons:
             delta = 2 if k in GRAND else 1 if k in UNCLE else 0
