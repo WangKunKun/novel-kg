@@ -90,9 +90,12 @@ def li_family_members(conn: sqlite3.Connection) -> set[str]:
     id2name = {pid: p.name for pid, p in persons.items()}
     kin = _kin_edges(conn, KIN_ALL)
     adj: dict[str, set[str]] = defaultdict(set)
+    # 亲属边端点应为人物；端点是非人物实体（如势力挂亲属边的错边，安家/木鹿氏案）
+    # 的边不进图——否则 BFS 把势力拉进闭包，下方 id2name[pid] 直接 KeyError
     for _, a, b in kin:
-        adj[a].add(b)
-        adj[b].add(a)
+        if a in id2name and b in id2name:
+            adj[a].add(b)
+            adj[b].add(a)
     seeds = {pid for pid, name in id2name.items() if name in LI_SEEDS}
     closure, q = set(seeds), deque(seeds)
     while q:
@@ -103,7 +106,8 @@ def li_family_members(conn: sqlite3.Connection) -> set[str]:
                 q.append(nxt)
     # 过滤：李姓保留；非李姓仅当与李姓成员有夫妻边
     li = {pid for pid in closure if id2name[pid].startswith("李")}
-    spouses = {a if b in li else b for k, a, b in kin if k == "夫妻" and (a in li or b in li)}
+    spouses = {a if b in li else b for k, a, b in kin
+               if k == "夫妻" and (a in li or b in li) and a in id2name and b in id2name}
     # 夫妻边端点必在连通闭包内，无需再交 closure
     return li | spouses
 
