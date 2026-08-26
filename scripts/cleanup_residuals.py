@@ -122,15 +122,27 @@ def main() -> None:
                                  "WHERE rid=?", (new_id, fb, fa, r["id"]))
                     print(f"  交换 {a}→{b} 为 {b}→{a}")
                 n_swap += 1
+        # ADD 补的边也按 (from,to,chapter) 定位，会被上面 DEL 的同条目误删后重补，
+        # 循环往复还丢重放追加的 events——DEL 跳过 attrs 关系值等于 ADD kind 的边
+        add_kinds: dict[tuple[str, str], set] = {}
+        for _a, _b, _k, _c, _e in ADD:
+            add_kinds.setdefault((_a, _b), set()).add(_k)
         for a, b, ch in DEL:
             fa, fb = eid(a), eid(b)
             if not fa or not fb:
                 continue
-            q = ("SELECT id, chapter FROM relations "
+            q = ("SELECT id, chapter, attrs_json FROM relations "
                  "WHERE from_id=? AND to_id=? AND type='关系'")
             rows = [r for r in conn.execute(q, (fa, fb)).fetchall()
                     if ch is None or r["chapter"] == ch]
             for r in rows:
+                try:
+                    kind = json.loads(r["attrs_json"] or "{}").get("关系")
+                except (TypeError, ValueError):
+                    kind = None
+                if kind in add_kinds.get((a, b), ()):
+                    print(f"  跳过 DEL {a}→{b}（ADD 补的{kind}边，防删补循环）")
+                    continue
                 conn.execute("DELETE FROM relation_events WHERE rid=?", (r["id"],))
                 conn.execute("DELETE FROM relations WHERE id=?", (r["id"],))
                 print(f"  删边 {a}→{b}（ch{ch or '任意'}）")
