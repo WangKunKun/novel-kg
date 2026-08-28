@@ -24,7 +24,7 @@ class OpenAICompatibleClient:
 
     def __init__(self, model: str, base_url: str | None = None,
                  api_key: str | None = None,
-                 timeout: float = 240.0) -> None:
+                 timeout: float = 900.0) -> None:
         from openai import OpenAI
 
         kwargs: dict[str, Any] = {}
@@ -32,7 +32,8 @@ class OpenAICompatibleClient:
             kwargs["base_url"] = base_url
         if api_key:
             kwargs["api_key"] = api_key
-        # 显式超时+关闭库内重试：挂住的请求 240s 快速失败，交给外层循环重试
+        # 显式超时+关闭库内重试：实测整章抽取在服务降速期可达 ~750s，
+        # 超时取 900s 快速失败（真死挂不空等），交给外层循环重试
         kwargs["timeout"] = timeout
         kwargs["max_retries"] = 0
         self.client = OpenAI(**kwargs)
