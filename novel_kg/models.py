@@ -1,6 +1,13 @@
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+
+def _coerce_attrs(v: Any) -> Any:
+    # LLM 偶尔把 attrs 直接给成字符串（如 "师徒"），包成 {"note": ...} 无损保留
+    if isinstance(v, str):
+        return {"note": v}
+    return v
 
 
 class ExtractedEntity(BaseModel):
@@ -13,6 +20,8 @@ class ExtractedEntity(BaseModel):
     attrs: dict[str, Any] = Field(default_factory=dict)
     evidence: str = ""
 
+    _attrs_coerce = field_validator("attrs", mode="before")(_coerce_attrs)
+
 
 class ExtractedRelation(BaseModel):
     from_name: str
@@ -20,6 +29,8 @@ class ExtractedRelation(BaseModel):
     type: str
     attrs: dict[str, Any] = Field(default_factory=dict)
     evidence: str = ""
+
+    _attrs_coerce = field_validator("attrs", mode="before")(_coerce_attrs)
 
 
 class ChapterExtraction(BaseModel):
