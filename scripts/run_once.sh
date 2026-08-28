@@ -9,6 +9,10 @@ source .venv/bin/activate
 LOG=/tmp/novel_kg_run2.log
 LIMIT=${1:-1617}
 
+# 强制直连：bigmodel.cn 是国内 API，走系统代理（127.0.0.1:7897）会慢/瞬断
+export HTTP_PROXY= HTTPS_PROXY= http_proxy= https_proxy= ALL_PROXY= all_proxy=
+export NO_PROXY='*' no_proxy='*'
+
 echo "[run_once] $(date '+%F %H:%M:%S') 启动，limit=$LIMIT" >> "$LOG"
 if python -m novel_kg.cli --novel 玄鉴仙族.txt --schema config/novels/xuanjian.yaml \
     --db data/novel.db --model glm-5.3 --limit "$LIMIT" >> "$LOG" 2>&1; then
