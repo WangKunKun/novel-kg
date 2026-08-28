@@ -23,7 +23,8 @@ class OpenAICompatibleClient:
     """生产用：兼容 OpenAI 接口（智谱 GLM 等可填 base_url 接入）。"""
 
     def __init__(self, model: str, base_url: str | None = None,
-                 api_key: str | None = None) -> None:
+                 api_key: str | None = None,
+                 timeout: float = 240.0) -> None:
         from openai import OpenAI
 
         kwargs: dict[str, Any] = {}
@@ -31,6 +32,9 @@ class OpenAICompatibleClient:
             kwargs["base_url"] = base_url
         if api_key:
             kwargs["api_key"] = api_key
+        # 显式超时+关闭库内重试：挂住的请求 240s 快速失败，交给外层循环重试
+        kwargs["timeout"] = timeout
+        kwargs["max_retries"] = 0
         self.client = OpenAI(**kwargs)
         self.model = model
         # 累计 token 统计（含上下文缓存命中），供调用方报告节省情况
