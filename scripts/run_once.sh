@@ -19,7 +19,7 @@ export NO_PROXY='*' no_proxy='*'
 
 progress() { sqlite3 "$DB" "SELECT COALESCE(MAX(chapter),0) FROM extractions;" 2>/dev/null || echo 0; }
 
-echo "[run_once] $(date '+%F %H:%M:%S') 启动，limit=$LIMIT（看门狗${STALL_MINUTES}分钟）" >> "$LOG"
+echo "[run_once] $(date '+%F %H:%M:%S') 启动，limit=${LIMIT}（看门狗${STALL_MINUTES}分钟）" >> "$LOG"
 python -m novel_kg.cli --novel 玄鉴仙族.txt --schema config/novels/xuanjian.yaml \
     --db "$DB" --model glm-5.3 --limit "$LIMIT" >> "$LOG" 2>&1 &
 PID=$!
@@ -31,7 +31,7 @@ while kill -0 "$PID" 2>/dev/null; do
   if [ "$CUR" != "$LAST" ]; then
     LAST=$CUR; LAST_AT=$(date +%s)
   elif [ $(( $(date +%s) - LAST_AT )) -gt $(( STALL_MINUTES * 60 )) ]; then
-    echo "[run_once] $(date '+%F %H:%M:%S') 看门狗：${STALL_MINUTES}分钟无进展（卡在$CUR章），杀掉重启换连接" >> "$LOG"
+    echo "[run_once] $(date '+%F %H:%M:%S') 看门狗：${STALL_MINUTES}分钟无进展（卡在${CUR}章），杀掉重启换连接" >> "$LOG"
     kill "$PID" 2>/dev/null; sleep 2; kill -9 "$PID" 2>/dev/null
     exit 3
   fi
