@@ -24,7 +24,7 @@ class OpenAICompatibleClient:
 
     def __init__(self, model: str, base_url: str | None = None,
                  api_key: str | None = None,
-                 timeout: float = 900.0) -> None:
+                 timeout: float = 2400.0) -> None:
         from openai import OpenAI
 
         kwargs: dict[str, Any] = {}
@@ -32,10 +32,17 @@ class OpenAICompatibleClient:
             kwargs["base_url"] = base_url
         if api_key:
             kwargs["api_key"] = api_key
-        # 显式超时+关闭库内重试：实测整章抽取在服务降速期可达 ~750s，
-        # 超时取 900s 快速失败（真死挂不空等），交给外层循环重试
+        # 显式超时+关闭库内重试：服务降速期整章抽取实测 744s~20min（2026-08-29
+        # 中午实测 723 章 18.5min/章），超时取 2400s 让慢响应自然完成而非掐死重试
         kwargs["timeout"] = timeout
         kwargs["max_retries"] = 0
+        # 强制 IPv4：bigmodel 的阿里云 GA IPv6 链路实测慢 5 倍且大响应
+        # 会拖成无限挂起（分块流不断重置 read timeout，900s 超时永不触发）。
+        # 本环境 openai 3.x 依赖的是 httpx2（import httpx2 as _httpx）
+        import httpx2 as httpx
+        kwargs["http_client"] = httpx.Client(
+            transport=httpx.HTTPTransport(local_address="0.0.0.0"),
+        )
         self.client = OpenAI(**kwargs)
         self.model = model
         # 累计 token 统计（含上下文缓存命中），供调用方报告节省情况
