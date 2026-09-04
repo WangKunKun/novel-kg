@@ -39,5 +39,13 @@ def extract_chapter(
 ) -> ChapterExtraction:
     system = build_system_prompt(schema)
     user = f"第{chapter.index}章 {chapter.title}\n\n{chapter.text}"
-    raw = client.complete_json(system, user)
+    try:
+        raw = client.complete_json(system, user)
+    except RuntimeError as e:
+        # 智谱内容安全过滤（1301）：同输入必然同结果，重试无意义。
+        # 返回空抽取让管道继续，该章事后可用 SQL 找回：
+        # SELECT chapter FROM extractions WHERE raw_json LIKE '%"entities": []%';
+        if "1301" in str(e) or "contentFilter" in str(e):
+            return ChapterExtraction(entities=[], relations=[])
+        raise
     return ChapterExtraction.model_validate(raw)
